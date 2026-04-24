@@ -221,7 +221,7 @@ function validateDimensions(d: MelhorEnvioDimensions): string | null {
 function shipmentFail(
   code: "invalid_input" | "network_error" | "api_error" | "invalid_response",
   message: string,
-): MelhorEnvioShipmentActionResult {
+): Extract<MelhorEnvioShipmentActionResult, { ok: false }> {
   return { ok: false, code, message };
 }
 
