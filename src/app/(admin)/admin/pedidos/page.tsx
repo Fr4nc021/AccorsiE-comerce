@@ -19,6 +19,11 @@ const logisticaLabel: Record<PedidoLogisticaStatus, string> = {
   entregue: "Entregue",
 };
 
+function toSafeNumber(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function logisticaPillClass(ls: PedidoLogisticaStatus): string {
   switch (ls) {
     case "entregue":
@@ -57,7 +62,7 @@ export default async function AdminPedidosPage() {
   const emSeparacao = pedidos.filter((p) => p.logistica_status === "em_separacao").length;
   const totalFaturado = pedidos
     .filter((p) => p.status === "pago")
-    .reduce((acc, pedido) => acc + pedido.total, 0);
+    .reduce((acc, pedido) => acc + toSafeNumber(pedido.total), 0);
 
   return (
     <div className="space-y-6">
