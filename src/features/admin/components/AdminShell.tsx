@@ -10,6 +10,7 @@ function pageTitle(pathname: string): string {
   if (pathname === "/admin/pedidos") return "Pedidos";
   if (/^\/admin\/pedidos\/[^/]+$/.test(pathname)) return "Detalhe do pedido";
   if (pathname === "/admin/marcas-e-modelos") return "Marcas e modelos";
+  if (pathname === "/admin/consulta-fipe") return "Consulta FIPE";
   if (pathname === "/admin/marcas") return "Marcas e modelos";
   if (pathname === "/admin/modelos") return "Marcas e modelos";
   if (pathname === "/admin/categorias") return "Categorias";
@@ -115,6 +116,19 @@ function IconTag({ className }: { className?: string }) {
   );
 }
 
+function IconFipeTable({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM4 10h16M10 5v14"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function IconShoppingCart({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -172,6 +186,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const categoriasActive = pathname.startsWith("/admin/categorias");
   const layoutSiteActive = pathname.startsWith("/admin/layout");
   const clientesActive = pathname.startsWith("/admin/clientes");
+  const consultaFipeActive = pathname.startsWith("/admin/consulta-fipe");
 
   const navLinkClass = (active: boolean) =>
     [
@@ -221,6 +236,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <Link href="/admin/marcas-e-modelos" className={navLinkClass(marcasModelosActive)}>
             <IconLayers className="h-5 w-5 shrink-0 opacity-80" />
             Marcas e modelos
+          </Link>
+          <Link href="/admin/consulta-fipe" className={navLinkClass(consultaFipeActive)}>
+            <IconFipeTable className="h-5 w-5 shrink-0 opacity-80" />
+            Consulta FIPE
           </Link>
           <Link href="/admin/categorias" className={navLinkClass(categoriasActive)}>
             <IconTag className="h-5 w-5 shrink-0 opacity-80" />

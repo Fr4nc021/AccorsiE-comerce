@@ -40,6 +40,11 @@ export type ProductEditValues = {
   descricao: string;
   valor: number;
   foto: string;
+  fotos: Array<{
+    foto: string;
+    is_principal: boolean;
+    ordem: number;
+  }>;
   quantidade_estoque: number;
   em_destaque: boolean;
   categoria_ids: string[];
@@ -242,7 +247,7 @@ export function ProductEditForm({
                   </div>
                 </div>
 
-                <ProductPhotoPanel initialFoto={product.foto} />
+                <ProductPhotoPanel initialFoto={product.foto} initialFotos={product.fotos} />
 
                 <ProductDestaqueField key={product.id} defaultChecked={product.em_destaque} />
 

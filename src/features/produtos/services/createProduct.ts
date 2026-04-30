@@ -14,6 +14,7 @@ import {
   isHtmlDescriptionEmpty,
   sanitizeProductDescriptionHtml,
 } from "@/features/produtos/utils/sanitizeProductDescription";
+import { parseProductPhotoGalleryFromForm } from "@/features/produtos/services/productPhotoGalleryForm";
 import { createClient } from "@/services/supabase/server";
 import { revalidatePath } from "next/cache";
 
@@ -33,7 +34,11 @@ export async function createProduct(
   const descricao =
     descricaoSan && !isHtmlDescriptionEmpty(descricaoSan) ? descricaoSan : null;
   const valorRaw = String(formData.get("valor") ?? "").replace(",", ".");
-  const foto = String(formData.get("foto") ?? "").trim() || null;
+  const galleryParsed = parseProductPhotoGalleryFromForm(formData);
+  if (!galleryParsed.ok) {
+    return { ok: false, message: galleryParsed.message };
+  }
+  const foto = galleryParsed.principalFoto;
   const em_destaque = formData.get("em_destaque") === "on";
   const quantidadeRaw = String(formData.get("quantidade_estoque") ?? "").trim();
   const compatJson = String(formData.get("compat_json") ?? "");
@@ -121,6 +126,23 @@ export async function createProduct(
       ok: false,
       message: `Não foi possível salvar: ${prodError.message}. Tente de novo ou volte ao painel.`,
     };
+  }
+
+  if (galleryParsed.photos.length > 0) {
+    const { error: photosError } = await supabase.from("produto_fotos").insert(
+      galleryParsed.photos.map((photo) => ({
+        produto_id: produto.id,
+        foto: photo.foto,
+        ordem: photo.ordem,
+        is_principal: photo.is_principal,
+      }))
+    );
+    if (photosError) {
+      return {
+        ok: false,
+        message: `O produto foi criado, mas a galeria de fotos não pôde ser salva: ${photosError.message}. Você pode editar o produto no painel para ajustar.`,
+      };
+    }
   }
 
   if (compatRows.length > 0) {

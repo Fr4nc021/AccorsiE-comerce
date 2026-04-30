@@ -21,7 +21,14 @@ export default async function PublicLayout({ children }: { children: ReactNode }
   } = await supabase.auth.getUser();
   const accountUser = user ? { email: user.email ?? "" } : null;
   let showAdminLink = false;
-  let garageVehicles: { id: number; placa: string; modelo_id: string | null; ano: number | null }[] = [];
+  let garageVehicles: {
+    id: number;
+    placa: string;
+    marca: string | null;
+    modelo: string | null;
+    modelo_id: string | null;
+    ano: number | null;
+  }[] = [];
   if (user) {
     const { data: profile } = await supabase
       .from("profiles")
@@ -32,7 +39,7 @@ export default async function PublicLayout({ children }: { children: ReactNode }
 
     const { data: garageData } = await supabase
       .from("garagem_veiculos")
-      .select("id, placa, modelo_id, ano")
+      .select("id, placa, marca, modelo, modelo_id, ano")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
     garageVehicles = garageData ?? [];

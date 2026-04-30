@@ -49,7 +49,14 @@ type StoreNavbarProps = {
   homeBannerSrcs: string[];
   /** Quando definido, o ícone de perfil leva à área logada; caso contrário, ao login. */
   accountUser: StoreNavbarAccountUser | null;
-  garageVehicles: { id: number; placa: string; modelo_id: string | null; ano: number | null }[];
+  garageVehicles: {
+    id: number;
+    placa: string;
+    marca: string | null;
+    modelo: string | null;
+    modelo_id: string | null;
+    ano: number | null;
+  }[];
   /** Link discreto para o painel (somente role admin). */
   showAdminLink?: boolean;
 };
@@ -284,7 +291,8 @@ export function StoreNavbar({
                 <button
                   type="button"
                   onClick={openGarage}
-                  className="hidden max-w-[min(100%,16rem)] items-center gap-1.5 rounded-full border border-store-line bg-store-subtle px-1.5 py-1.5 text-left transition hover:border-store-navy-muted/50 sm:flex sm:max-w-none sm:gap-2.5 sm:px-4 sm:py-2 lg:gap-3"
+                  className="flex max-w-[min(100%,16rem)] items-center gap-1.5 rounded-full border border-store-line bg-store-subtle px-1.5 py-1.5 text-left transition hover:border-store-navy-muted/50 sm:max-w-none sm:gap-2.5 sm:px-4 sm:py-2 lg:gap-3"
+                  aria-label="Minha garagem"
                 >
                   <Image
                     src={ICON_GARAGE}
@@ -293,8 +301,8 @@ export function StoreNavbar({
                     height={ICON_PX}
                     className={iconImgClass}
                   />
-                  <span className="hidden min-w-0 leading-tight sm:block">
-                    <span className="block text-sm font-bold text-store-navy">Minha Garagem</span>
+                  <span className="min-w-0 leading-tight sm:block">
+                    <span className="hidden text-sm font-bold text-store-navy sm:block">Minha Garagem</span>
                     <span className="hidden text-xs font-normal text-store-navy-muted md:block">
                       Adicione seu veículo
                     </span>
@@ -438,13 +446,26 @@ export function StoreNavbar({
                     Entrar
                   </Link>
                 )}
-                <Link
-                  href={accountUser ? "/conta?aba=garagem" : "/login?next=%2Fconta%3Faba%3Dgaragem"}
-                  className={mobileNavRowClass(false)}
-                  onClick={closeMobileNav}
-                >
-                  Minha garagem
-                </Link>
+                {accountUser && pathname === "/" ? (
+                  <button
+                    type="button"
+                    className={mobileNavRowClass(false)}
+                    onClick={() => {
+                      closeMobileNav();
+                      setGarageModalOpen(true);
+                    }}
+                  >
+                    Minha garagem
+                  </button>
+                ) : (
+                  <Link
+                    href={accountUser ? "/conta?aba=garagem" : "/login?next=%2Fconta%3Faba%3Dgaragem"}
+                    className={mobileNavRowClass(false)}
+                    onClick={closeMobileNav}
+                  >
+                    Minha garagem
+                  </Link>
+                )}
               </nav>
             </div>
           ) : null}
@@ -485,22 +506,29 @@ export function StoreNavbar({
                 </p>
               </div>
             ) : (
-              <ul className="mt-4 space-y-2.5">
+              <ul className="mt-4 max-h-[min(60vh,24rem)] space-y-2.5 overflow-y-auto pr-0.5">
                 {garageVehicles.map((vehicle) => {
                   const qs = new URLSearchParams();
                   if (vehicle.modelo_id) qs.set("modelo", vehicle.modelo_id);
                   if (vehicle.ano != null) qs.set("ano", String(vehicle.ano));
                   const href = `/produtos${qs.toString() ? `?${qs.toString()}` : ""}`;
+                  const descricao = [vehicle.marca, vehicle.modelo].filter(Boolean).join(" - ") || "Veículo";
                   return (
                     <li
                       key={vehicle.id}
                       className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-store-line/70 bg-store-subtle/15 px-3 py-2.5"
                     >
-                      <p className="text-sm font-bold uppercase tracking-[0.12em] text-store-navy">{vehicle.placa}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold uppercase tracking-[0.12em] text-store-navy">{vehicle.placa}</p>
+                        <p className="mt-0.5 text-xs text-store-navy-muted">
+                          {descricao}
+                          {vehicle.ano != null ? ` (${vehicle.ano})` : ""}
+                        </p>
+                      </div>
                       <Link
                         href={href}
                         onClick={() => setGarageModalOpen(false)}
-                        className="inline-flex rounded-md bg-store-navy px-3 py-1.5 text-xs font-bold text-white transition hover:bg-store-navy/90"
+                        className="inline-flex shrink-0 rounded-md bg-store-navy px-3 py-1.5 text-xs font-bold text-white transition hover:bg-store-navy/90"
                       >
                         Filtrar
                       </Link>

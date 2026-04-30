@@ -45,6 +45,7 @@ export async function middleware(request: NextRequest) {
   const needsAdmin =
     isProtectedAdminRoute(pathname) ||
     pathname.startsWith("/api/admin") ||
+    pathname.startsWith("/api/fipe") ||
     pathname.startsWith("/api/integrations/melhor-envio");
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

@@ -69,11 +69,18 @@ export default async function EditProdutoPage({ params }: PageProps) {
     } else if (!produto) {
       notFound();
     } else {
-      const { data: compRows } = await supabase
-        .from("produto_compatibilidades")
-        .select("modelo_id, ano_inicio, ano_fim")
-        .eq("produto_id", id)
-        .order("ano_inicio");
+      const [{ data: compRows }, { data: fotosRows }] = await Promise.all([
+        supabase
+          .from("produto_compatibilidades")
+          .select("modelo_id, ano_inicio, ano_fim")
+          .eq("produto_id", id)
+          .order("ano_inicio"),
+        supabase
+          .from("produto_fotos")
+          .select("foto, is_principal, ordem")
+          .eq("produto_id", id)
+          .order("ordem", { ascending: true }),
+      ]);
 
       const { data: catLinkRows, error: catLinkErr } = await supabase
         .from("produto_categorias")
@@ -109,6 +116,11 @@ export default async function EditProdutoPage({ params }: PageProps) {
         descricao: p.descricao ?? "",
         valor: Number(p.valor),
         foto: p.foto ?? "",
+        fotos: (fotosRows ?? []).map((row) => ({
+          foto: row.foto,
+          is_principal: row.is_principal === true,
+          ordem: Number.isFinite(row.ordem) ? Number(row.ordem) : 0,
+        })),
         quantidade_estoque: p.quantidade_estoque,
         em_destaque: Boolean(p.em_destaque),
         categoria_ids: catLinkErr ? [] : (catLinkRows ?? []).map((r) => r.categoria_id),

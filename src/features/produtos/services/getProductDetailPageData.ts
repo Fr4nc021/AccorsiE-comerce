@@ -6,6 +6,7 @@ import type { ProductSummary } from "@/types/product";
 type ProductDetail = ProductSummary & {
   descricao: string;
   compatibilidades: string[];
+  imageUrls: string[];
 };
 
 type ProductDetailPageData = {
@@ -34,6 +35,12 @@ type ProdutoSummaryRow = {
   quantidade_estoque: unknown;
   desconto_pix_percent?: unknown;
   desconto_cartao_percent?: unknown;
+};
+
+type ProdutoFotoRow = {
+  foto: string | null;
+  is_principal: boolean | null;
+  ordem: number | null;
 };
 
 function toStock(raw: unknown): number {
@@ -142,7 +149,21 @@ export async function getProductDetailPageData(productId: string): Promise<Produ
       ...toSummary(produtoRow as ProdutoSummaryRow),
       descricao: (produtoRow.descricao ?? "").trim(),
       compatibilidades: [],
+      imageUrls: [],
     };
+
+    const { data: fotosRows } = await supabase
+      .from("produto_fotos")
+      .select("foto, is_principal, ordem")
+      .eq("produto_id", productId)
+      .order("is_principal", { ascending: false })
+      .order("ordem", { ascending: true });
+
+    const galleryFromTable = (fotosRows as ProdutoFotoRow[] | null | undefined)
+      ?.map((row) => resolveProductImagePublicUrl(row.foto))
+      .filter((url): url is string => Boolean(url));
+    const fallbackImage = produto.imageUrl ? [produto.imageUrl] : [];
+    produto.imageUrls = galleryFromTable && galleryFromTable.length > 0 ? galleryFromTable : fallbackImage;
 
     const { data: compatRows } = await supabase
       .from("produto_compatibilidades")

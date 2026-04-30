@@ -118,53 +118,62 @@ function resizeImageToSquare(
   });
 }
 
-type ProductPhotoPanelProps = {
-  /** Valor inicial (edição) ou vazio (novo produto). */
-  initialFoto?: string;
+type ProductPhotoItem = {
+  foto: string;
+  is_principal: boolean;
+  ordem: number;
 };
 
-export function ProductPhotoPanel({ initialFoto = "" }: ProductPhotoPanelProps) {
-  const [fotoUrl, setFotoUrl] = useState(() => initialFoto.trim());
-  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+type ProductPhotoPanelProps = {
+  initialFoto?: string;
+  initialFotos?: ProductPhotoItem[];
+};
+
+function normalizeInitialPhotos(initialFoto: string, initialFotos: ProductPhotoItem[]): ProductPhotoItem[] {
+  const unique = new Set<string>();
+  const normalized = initialFotos
+    .map((item, idx) => ({
+      foto: String(item.foto ?? "").trim(),
+      is_principal: item.is_principal === true,
+      ordem: Number.isFinite(item.ordem) ? Number(item.ordem) : idx,
+    }))
+    .filter((item) => {
+      if (!item.foto || unique.has(item.foto)) return false;
+      unique.add(item.foto);
+      return true;
+    })
+    .sort((a, b) => a.ordem - b.ordem)
+    .map((item, idx) => ({ ...item, ordem: idx }));
+
+  if (normalized.length === 0 && initialFoto.trim()) {
+    return [{ foto: initialFoto.trim(), is_principal: true, ordem: 0 }];
+  }
+  if (!normalized.some((item) => item.is_principal) && normalized[0]) {
+    normalized[0] = { ...normalized[0], is_principal: true };
+  }
+  return normalized.map((item, idx) => ({ ...item, ordem: idx }));
+}
+
+export function ProductPhotoPanel({ initialFoto = "", initialFotos = [] }: ProductPhotoPanelProps) {
+  const [photos, setPhotos] = useState<ProductPhotoItem[]>(() =>
+    normalizeInitialPhotos(initialFoto, initialFotos)
+  );
   const [uploading, setUploading] = useState(false);
-  const [removing, setRemoving] = useState(false);
+  const [removingFoto, setRemovingFoto] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
-  const [manualEntry, setManualEntry] = useState(false);
+  const [manualUrl, setManualUrl] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const dragCounter = useRef(0);
 
   useEffect(() => {
-    setFotoUrl(initialFoto.trim());
-  }, [initialFoto]);
+    setPhotos(normalizeInitialPhotos(initialFoto, initialFotos));
+  }, [initialFoto, initialFotos]);
 
-  const revokePreview = useCallback(() => {
-    if (previewSrc?.startsWith("blob:")) URL.revokeObjectURL(previewSrc);
-  }, [previewSrc]);
-
-  const clearFile = useCallback(() => {
-    revokePreview();
-    setPreviewSrc(null);
-    setFotoUrl("");
-    setError(null);
-    if (fileRef.current) fileRef.current.value = "";
-  }, [revokePreview]);
-
-  const removeStorageObjectForRef = async (ref: string) => {
-    const bucket = productImagesBucket();
-    const path = parseProductImageStoragePath(ref, bucket);
-    if (!path) return;
-    const { error } = await createClient().storage.from(bucket).remove([path]);
-    if (error && !/not found|No such file|404/i.test(error.message)) {
-      throw new Error(error.message);
-    }
-  };
-
-  const handleExcluirImagem = async () => {
-    const ref = fotoUrl.trim();
+  const handleExcluirImagem = async (ref: string) => {
     if (!ref) return;
     setError(null);
-    setRemoving(true);
+    setRemovingFoto(ref);
     try {
       const bucket = productImagesBucket();
       const path = parseProductImageStoragePath(ref, bucket);
@@ -177,21 +186,27 @@ export function ProductPhotoPanel({ initialFoto = "" }: ProductPhotoPanelProps) 
           return;
         }
       }
-      clearFile();
+      setPhotos((prev) => {
+        const next = prev.filter((item) => item.foto !== ref).map((item, idx) => ({ ...item, ordem: idx }));
+        if (next.length > 0 && !next.some((item) => item.is_principal)) {
+          next[0] = { ...next[0], is_principal: true };
+        }
+        return next;
+      });
     } finally {
-      setRemoving(false);
+      setRemovingFoto(null);
     }
   };
 
-  const uploadFile = async (file: File) => {
+  const uploadFile = async (file: File): Promise<string | null> => {
     setError(null);
     if (!ALLOWED_MIME.has(file.type)) {
       setError("Use JPEG, PNG, WEBP ou GIF.");
-      return;
+      return null;
     }
     if (file.size > MAX_FILE_BYTES) {
       setError("Arquivo muito grande (máximo 5 MB).");
-      return;
+      return null;
     }
     let width = 0;
     let height = 0;
@@ -201,7 +216,7 @@ export function ProductPhotoPanel({ initialFoto = "" }: ProductPhotoPanelProps) 
       height = dims.height;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Não foi possível validar a imagem.");
-      return;
+      return null;
     }
 
     let fileToUpload = file;
@@ -210,26 +225,20 @@ export function ProductPhotoPanel({ initialFoto = "" }: ProductPhotoPanelProps) 
         setError(
           `GIF fora do padrão não pode ser convertido automaticamente. Envie GIF em ${REQUIRED_IMAGE_WIDTH}x${REQUIRED_IMAGE_HEIGHT}px ou use PNG/JPEG/WEBP para ajuste automático.`
         );
-        return;
+        return null;
       }
       try {
         fileToUpload = await resizeImageToSquare(file, REQUIRED_IMAGE_WIDTH, REQUIRED_IMAGE_HEIGHT);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Não foi possível ajustar a imagem para 1200x1200.");
-        return;
+        return null;
       }
     }
 
     if (fileToUpload.size > MAX_FILE_BYTES) {
       setError("Imagem ajustada ficou maior que 5 MB. Tente uma imagem menor.");
-      return;
+      return null;
     }
-
-    const previousFoto = fotoUrl;
-    revokePreview();
-    const blobUrl = URL.createObjectURL(fileToUpload);
-    setPreviewSrc(blobUrl);
-    setUploading(true);
 
     try {
       const supabase = createClient();
@@ -253,32 +262,80 @@ export function ProductPhotoPanel({ initialFoto = "" }: ProductPhotoPanelProps) 
         throw new Error(msg);
       }
 
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from(bucket).getPublicUrl(path);
-
-      URL.revokeObjectURL(blobUrl);
-      setPreviewSrc(null);
-      setFotoUrl(publicUrl);
-
-      const oldRef = previousFoto.trim();
-      if (oldRef && oldRef !== publicUrl) {
-        try {
-          await removeStorageObjectForRef(oldRef);
-        } catch {
-          /* imagem antiga pode permanecer no bucket */
-        }
-      }
+      const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+      return data.publicUrl;
     } catch (e) {
-      URL.revokeObjectURL(blobUrl);
-      setPreviewSrc(null);
-      setFotoUrl(previousFoto);
       setError(e instanceof Error ? e.message : "Falha no envio da imagem.");
-      if (fileRef.current) fileRef.current.value = "";
-    } finally {
-      setUploading(false);
+      return null;
     }
   };
+
+  const addUrlsToGallery = useCallback((urls: string[]) => {
+    if (urls.length === 0) return;
+    setPhotos((prev) => {
+      const existing = new Set(prev.map((item) => item.foto));
+      const incoming = urls.filter((url) => url.trim() && !existing.has(url.trim())).map((url) => url.trim());
+      if (incoming.length === 0) return prev;
+      const base = prev.map((item, idx) => ({ ...item, ordem: idx }));
+      const appended = incoming.map((foto, idx) => ({
+        foto,
+        is_principal: false,
+        ordem: base.length + idx,
+      }));
+      const merged = [...base, ...appended];
+      if (!merged.some((item) => item.is_principal) && merged[0]) {
+        merged[0] = { ...merged[0], is_principal: true };
+      }
+      return merged;
+    });
+  }, []);
+
+  const uploadFiles = useCallback(
+    async (files: FileList | File[]) => {
+      const list = Array.from(files);
+      if (list.length === 0) return;
+      setUploading(true);
+      try {
+        const uploaded: string[] = [];
+        for (const file of list) {
+          const url = await uploadFile(file);
+          if (url) uploaded.push(url);
+        }
+        addUrlsToGallery(uploaded);
+      } finally {
+        setUploading(false);
+        if (fileRef.current) fileRef.current.value = "";
+      }
+    },
+    [addUrlsToGallery]
+  );
+
+  const setPrincipal = useCallback((foto: string) => {
+    setPhotos((prev) =>
+      prev.map((item) => ({
+        ...item,
+        is_principal: item.foto === foto,
+      }))
+    );
+  }, []);
+
+  const movePhoto = useCallback((index: number, direction: -1 | 1) => {
+    setPhotos((prev) => {
+      const target = index + direction;
+      if (target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      const [item] = next.splice(index, 1);
+      next.splice(target, 0, item);
+      return next.map((entry, idx) => ({ ...entry, ordem: idx }));
+    });
+  }, []);
+
+  const addManualUrl = useCallback(() => {
+    const ref = manualUrl.trim();
+    if (!ref) return;
+    addUrlsToGallery([resolvePublicImageUrl(ref)]);
+    setManualUrl("");
+  }, [addUrlsToGallery, manualUrl]);
 
   const onDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
@@ -307,51 +364,34 @@ export function ProductPhotoPanel({ initialFoto = "" }: ProductPhotoPanelProps) 
     e.stopPropagation();
     dragCounter.current = 0;
     setDragActive(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) void uploadFile(file);
+    const files = e.dataTransfer.files;
+    if (files?.length) void uploadFiles(files);
   };
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) void uploadFile(file);
+    const files = e.target.files;
+    if (files?.length) void uploadFiles(files);
   };
 
-  const hasListedImage = fotoUrl.trim() !== "" && !uploading;
-  const resolvedListSrc = hasListedImage ? resolvePublicImageUrl(fotoUrl) : "";
+  const principal = photos.find((item) => item.is_principal) ?? photos[0] ?? null;
+  const principalRef = principal?.foto ?? "";
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm md:p-5">
-      <h2 className="text-base font-bold text-gray-900">Fotos e vídeo</h2>
+      <h2 className="text-base font-bold text-gray-900">Fotos da galeria</h2>
+      <input type="hidden" name="foto" value={principalRef} readOnly />
+      <input type="hidden" name="fotos_json" value={JSON.stringify(photos)} readOnly />
 
-      {manualEntry ? (
-        <div className="mt-4 flex flex-col gap-2">
-          <label htmlFor="foto_manual" className="text-sm font-medium text-gray-700">
-            URL ou caminho da imagem
-          </label>
-          <input
-            id="foto_manual"
-            name="foto"
-            value={fotoUrl}
-            onChange={(e) => setFotoUrl(e.target.value)}
-            className={fieldClass}
-            placeholder="Ex.: https://… ou product-images/produtos/…"
-            autoComplete="off"
-          />
-          <button
-            type="button"
-            onClick={() => setManualEntry(false)}
-            className="self-start text-sm font-medium text-admin-accent hover:underline"
-          >
-            Usar arrastar e soltar
-          </button>
-        </div>
-      ) : (
-        <>
-          <input type="hidden" name="foto" value={fotoUrl} readOnly />
-
-          {hasListedImage && (
-            <ul className="mt-4 list-none space-y-2 p-0" aria-label="Imagens do produto">
-              <li className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50/50 p-3 sm:flex-row sm:items-center">
+      {photos.length > 0 && (
+        <ul className="mt-4 list-none space-y-2 p-0" aria-label="Imagens do produto">
+          {photos.map((item, index) => {
+            const resolvedListSrc = resolvePublicImageUrl(item.foto);
+            const removing = removingFoto === item.foto;
+            return (
+              <li
+                key={item.foto}
+                className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50/50 p-3 sm:flex-row sm:items-center"
+              >
                 <div className="flex shrink-0 justify-center sm:justify-start">
                   <img
                     src={resolvedListSrc}
@@ -361,163 +401,145 @@ export function ProductPhotoPanel({ initialFoto = "" }: ProductPhotoPanelProps) 
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                    Imagem atual
+                    {item.is_principal ? "Foto principal" : `Foto complementar #${index + 1}`}
                   </p>
-                  <p className="mt-0.5 break-all text-sm text-gray-800" title={fotoUrl}>
-                    {fotoUrl}
+                  <p className="mt-0.5 break-all text-sm text-gray-800" title={item.foto}>
+                    {item.foto}
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-2 sm:flex-col sm:items-stretch">
                   <button
                     type="button"
-                    disabled={removing}
-                    onClick={() => void handleExcluirImagem()}
-                    className="rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60"
-                  >
-                    {removing ? "Removendo…" : "Excluir imagem"}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={uploading}
-                    onClick={() => fileRef.current?.click()}
+                    disabled={uploading || removing || item.is_principal}
+                    onClick={() => setPrincipal(item.foto)}
                     className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-60"
                   >
-                    Carregar nova
+                    Principal
+                  </button>
+                  <div className="flex gap-2 sm:justify-end">
+                    <button
+                      type="button"
+                      disabled={uploading || index === 0}
+                      onClick={() => movePhoto(index, -1)}
+                      className="rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-60"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      disabled={uploading || index === photos.length - 1}
+                      onClick={() => movePhoto(index, 1)}
+                      className="rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-60"
+                    >
+                      ↓
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={uploading || removing}
+                    onClick={() => void handleExcluirImagem(item.foto)}
+                    className="rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60"
+                  >
+                    {removing ? "Removendo…" : "Excluir"}
                   </button>
                 </div>
               </li>
-            </ul>
-          )}
-
-          <div
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                fileRef.current?.click();
-              }
-            }}
-            onDragEnter={onDragEnter}
-            onDragLeave={onDragLeave}
-            onDragOver={onDragOver}
-            onDrop={onDrop}
-            onClick={() => !uploading && fileRef.current?.click()}
-            className={`mt-4 flex min-h-[160px] cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-6 transition outline-none focus-visible:ring-2 focus-visible:ring-[#1d63ed]/30 sm:min-h-[200px] ${
-              dragActive
-                ? "border-admin-accent bg-[#1d63ed]/15"
-                : "border-admin-accent bg-[#1d63ed]/[0.06]"
-            } ${uploading ? "pointer-events-none opacity-70" : ""}`}
-            aria-label="Área para arrastar ou selecionar foto do produto"
-          >
-            <input
-              ref={fileRef}
-              type="file"
-              className="sr-only"
-              accept="image/jpeg,image/png,image/webp,image/gif"
-              onChange={onFileChange}
-            />
-
-            {previewSrc && uploading ? (
-              <div className="flex flex-col items-center gap-2">
-                <img
-                  src={previewSrc}
-                  alt=""
-                  className="max-h-32 w-auto max-w-full rounded-md object-contain opacity-80"
-                />
-                <p className="text-sm text-gray-600">Ajustando para 1200x1200 e enviando…</p>
-              </div>
-            ) : previewSrc && !uploading && !hasListedImage ? (
-              <div className="flex w-full max-w-sm flex-col items-center gap-3">
-                <img
-                  src={previewSrc}
-                  alt="Pré-visualização"
-                  className="max-h-40 w-auto max-w-full rounded-md object-contain shadow-sm"
-                />
-                <div className="flex flex-wrap items-center justify-center gap-2">
-                  <button
-                    type="button"
-                    onClick={(ev) => {
-                      ev.stopPropagation();
-                      fileRef.current?.click();
-                    }}
-                    className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                  >
-                    Trocar imagem
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(ev) => {
-                      ev.stopPropagation();
-                      clearFile();
-                    }}
-                    className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50"
-                  >
-                    Remover
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <>
-                <span
-                  className="flex h-12 w-12 items-center justify-center rounded-full text-white shadow-sm"
-                  style={{ backgroundColor: ACCENT }}
-                  aria-hidden
-                >
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
-                    <path
-                      d="M12 5v14M5 12h14"
-                      stroke="currentColor"
-                      strokeWidth="2.2"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                </span>
-                <p
-                  className="mt-4 max-w-xs text-center text-sm font-medium sm:max-w-md"
-                  style={{ color: ACCENT }}
-                >
-                  {hasListedImage
-                    ? "Arraste ou selecione uma nova imagem para substituir a atual"
-                    : "Arraste e solte, ou selecione fotos do produto"}
-                </p>
-              </>
-            )}
-          </div>
-
-          {error && (
-            <p className="mt-2 text-sm text-red-600" role="alert">
-              {error}
-            </p>
-          )}
-
-          <div className="mt-4 flex items-start gap-2 text-xs text-gray-500">
-            <svg
-              className="mt-0.5 h-4 w-4 shrink-0 text-gray-400"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              aria-hidden
-            >
-              <rect x="3" y="5" width="18" height="14" rx="2" />
-              <circle cx="8.5" cy="10" r="1.5" fill="currentColor" stroke="none" />
-              <path d="M21 15l-5-5-4 4-2-2-5 5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <p>
-              Padrão: 1200x1200px (autoajuste para PNG/JPEG/WEBP) / GIF precisa já estar em 1200x1200
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setManualEntry(true)}
-            className="mt-3 text-sm font-medium text-admin-accent hover:underline"
-          >
-            Ou informe URL ou caminho manualmente
-          </button>
-        </>
+            );
+          })}
+        </ul>
       )}
+
+      <div
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            fileRef.current?.click();
+          }
+        }}
+        onDragEnter={onDragEnter}
+        onDragLeave={onDragLeave}
+        onDragOver={onDragOver}
+        onDrop={onDrop}
+        onClick={() => !uploading && fileRef.current?.click()}
+        className={`mt-4 flex min-h-[160px] cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-6 transition outline-none focus-visible:ring-2 focus-visible:ring-[#1d63ed]/30 sm:min-h-[200px] ${
+          dragActive ? "border-admin-accent bg-[#1d63ed]/15" : "border-admin-accent bg-[#1d63ed]/[0.06]"
+        } ${uploading ? "pointer-events-none opacity-70" : ""}`}
+        aria-label="Área para arrastar ou selecionar fotos do produto"
+      >
+        <input
+          ref={fileRef}
+          type="file"
+          className="sr-only"
+          multiple
+          accept="image/jpeg,image/png,image/webp,image/gif"
+          onChange={onFileChange}
+        />
+
+        <span
+          className="flex h-12 w-12 items-center justify-center rounded-full text-white shadow-sm"
+          style={{ backgroundColor: ACCENT }}
+          aria-hidden
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path
+              d="M12 5v14M5 12h14"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+            />
+          </svg>
+        </span>
+        <p className="mt-4 max-w-xs text-center text-sm font-medium sm:max-w-md" style={{ color: ACCENT }}>
+          {uploading ? "Enviando imagens..." : "Arraste e solte, ou selecione uma ou mais fotos do produto"}
+        </p>
+      </div>
+
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-end">
+        <div className="flex-1">
+          <label htmlFor="foto_manual" className="text-sm font-medium text-gray-700">
+            URL ou caminho manual
+          </label>
+          <input
+            id="foto_manual"
+            value={manualUrl}
+            onChange={(e) => setManualUrl(e.target.value)}
+            className={`${fieldClass} mt-1 w-full`}
+            placeholder="Ex.: https://… ou product-images/produtos/…"
+            autoComplete="off"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={addManualUrl}
+          className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
+        >
+          Adicionar URL
+        </button>
+      </div>
+
+      {error && (
+        <p className="mt-2 text-sm text-red-600" role="alert">
+          {error}
+        </p>
+      )}
+
+      <div className="mt-4 flex items-start gap-2 text-xs text-gray-500">
+        <svg
+          className="mt-0.5 h-4 w-4 shrink-0 text-gray-400"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          aria-hidden
+        >
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <circle cx="8.5" cy="10" r="1.5" fill="currentColor" stroke="none" />
+          <path d="M21 15l-5-5-4 4-2-2-5 5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        <p>Padrão: 1200x1200px (autoajuste para PNG/JPEG/WEBP) / GIF precisa já estar em 1200x1200</p>
+      </div>
     </div>
   );
 }

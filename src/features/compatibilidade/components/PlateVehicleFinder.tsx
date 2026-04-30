@@ -32,6 +32,8 @@ type PendingVehicleMatch = {
   modeloId: string;
   modeloNome: string;
   ano: number | null;
+  /** Catálogo bate com o texto da API (evita salvar modelo_id errado por match parcial). */
+  catalogIdMatchesApi: boolean;
 };
 
 type VehicleInfoModalData = {
@@ -153,9 +155,11 @@ export function PlateVehicleFinder({ marcas, modelos, anosByModeloId, onResolved
       });
       setModalOpen(true);
 
-      const modeloApi = normalizeText(successPayload.modelo);
-      const marcaApi = canonicalizeBrandName(successPayload.marca);
-      const anoApi = successPayload.ano ?? null;
+      const modeloRaw = successPayload.informacoesVeiculo?.modelo ?? successPayload.modelo;
+      const marcaRaw = successPayload.informacoesVeiculo?.marca ?? successPayload.marca;
+      const modeloApi = normalizeText(modeloRaw);
+      const marcaApi = canonicalizeBrandName(marcaRaw);
+      const anoApi = successPayload.informacoesVeiculo?.ano ?? successPayload.ano ?? null;
 
       const candidates = modelos
         .map((modelo) => {
@@ -183,6 +187,12 @@ export function PlateVehicleFinder({ marcas, modelos, anosByModeloId, onResolved
         return;
       }
 
+      const nomeWinnerNorm = normalizeText(winner.nome);
+      const marcaWinnerNorm = canonicalizeBrandName(marcaNameById.get(winner.marca_id));
+      const exactModelo = Boolean(modeloApi && nomeWinnerNorm === modeloApi);
+      const exactMarca = Boolean(marcaApi && marcaWinnerNorm === marcaApi);
+      const catalogIdMatchesApi = exactModelo && (!marcaApi || exactMarca);
+
       let anoAplicado: number | null = null;
       if (anoApi != null) {
         const anos = anosByModeloId[winner.id] ?? [];
@@ -193,9 +203,12 @@ export function PlateVehicleFinder({ marcas, modelos, anosByModeloId, onResolved
         modeloId: winner.id,
         modeloNome: winner.nome,
         ano: anoAplicado,
+        catalogIdMatchesApi,
       });
+      const nomeExibicao =
+        successPayload.informacoesVeiculo?.modelo ?? successPayload.modelo ?? winner.nome;
       setFeedback(
-        `Veículo identificado: ${winner.nome}${anoAplicado ? ` (${anoAplicado})` : ""}. Deseja aplicar esse filtro?`
+        `Veículo identificado: ${nomeExibicao}${anoAplicado ? ` (${anoAplicado})` : ""}. Deseja aplicar esse filtro?`
       );
     } catch {
       setPendingMatch(null);
@@ -217,7 +230,9 @@ export function PlateVehicleFinder({ marcas, modelos, anosByModeloId, onResolved
     onResolvedVehicle(pendingMatch.modeloId, pendingMatch.ano);
     setModalOpen(false);
     setFeedback(
-      `Filtro aplicado: ${pendingMatch.modeloNome}${pendingMatch.ano ? ` (${pendingMatch.ano})` : ""}.`
+      pendingMatch.catalogIdMatchesApi
+        ? `Filtro aplicado: ${pendingMatch.modeloNome}${pendingMatch.ano ? ` (${pendingMatch.ano})` : ""}.`
+        : `Filtro pelo catálogo: ${pendingMatch.modeloNome}${pendingMatch.ano ? ` (${pendingMatch.ano})` : ""}. Confira se combina com seu carro.`
     );
     setPendingMatch(null);
   };
@@ -236,9 +251,9 @@ export function PlateVehicleFinder({ marcas, modelos, anosByModeloId, onResolved
         body: JSON.stringify({
           placa: placaNormalizada,
           marca: vehicleInfo?.marca ?? null,
-          modelo: pendingMatch?.modeloNome ?? vehicleInfo?.modelo ?? null,
-          ano: pendingMatch?.ano ?? vehicleInfo?.ano ?? null,
-          modeloId: pendingMatch?.modeloId ?? null,
+          modelo: vehicleInfo?.modelo ?? pendingMatch?.modeloNome ?? null,
+          ano: vehicleInfo?.ano ?? pendingMatch?.ano ?? null,
+          modeloId: pendingMatch?.catalogIdMatchesApi ? pendingMatch.modeloId : null,
         }),
       });
 
@@ -311,8 +326,10 @@ export function PlateVehicleFinder({ marcas, modelos, anosByModeloId, onResolved
             <div className="mt-3 rounded-xl border border-white/35 bg-white/10 px-3 py-2.5">
               <p className="text-xs font-semibold uppercase tracking-wide text-white/75">Veiculo identificado</p>
               <p className="mt-1 text-sm font-extrabold text-white">
-                Modelo: {pendingMatch.modeloNome}
-                {pendingMatch.ano ? ` - Ano: ${pendingMatch.ano}` : " - Ano: nao informado"}
+                Modelo: {vehicleInfo?.modelo ?? pendingMatch.modeloNome}
+                {(vehicleInfo?.ano ?? pendingMatch.ano)
+                  ? ` - Ano: ${vehicleInfo?.ano ?? pendingMatch.ano}`
+                  : " - Ano: nao informado"}
               </p>
             </div>
           ) : null}

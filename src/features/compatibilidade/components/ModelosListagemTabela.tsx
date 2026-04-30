@@ -17,6 +17,7 @@ export function ModelosListagemTabela({ items }: { items: ModeloListagemItem[] }
   const visibleIds = useMemo(() => items.map((i) => i.modeloId), [items]);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [bulkMessage, setBulkMessage] = useState<string | null>(null);
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const headerCheckboxRef = useRef<HTMLInputElement>(null);
 
@@ -50,23 +51,22 @@ export function ModelosListagemTabela({ items }: { items: ModeloListagemItem[] }
     });
   }, []);
 
-  const handleBulkDelete = () => {
+  const openBulkDeleteConfirm = () => {
+    if (selectedInView.length === 0 || pending) return;
+    setBulkDeleteConfirmOpen(true);
+  };
+
+  const runBulkDelete = () => {
     if (selectedInView.length === 0) return;
-    const n = selectedInView.length;
-    if (
-      !confirm(
-        `Excluir ${n} modelo(s) desta listagem (filtro ou busca atual)? As compatibilidades de produtos e anos de referência vinculados serão afetados. Esta ação não pode ser desfeita.`
-      )
-    ) {
-      return;
-    }
+    const idsSnapshot = [...selectedInView];
+    setBulkDeleteConfirmOpen(false);
     setBulkMessage(null);
     startTransition(async () => {
-      const { removidos, falhas } = await deleteModelosEmLote(selectedInView);
+      const { removidos, falhas } = await deleteModelosEmLote(idsSnapshot);
       const failed = new Set(falhas.map((f) => f.id));
       setSelected((prev) => {
         const next = new Set(prev);
-        for (const id of selectedInView) {
+        for (const id of idsSnapshot) {
           if (!failed.has(id)) next.delete(id);
         }
         return next;
@@ -97,7 +97,7 @@ export function ModelosListagemTabela({ items }: { items: ModeloListagemItem[] }
           </button>
           <button
             type="button"
-            onClick={handleBulkDelete}
+            onClick={openBulkDeleteConfirm}
             disabled={pending || selectedInView.length === 0}
             className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-800 transition hover:bg-red-100 disabled:opacity-50"
           >
@@ -109,6 +109,53 @@ export function ModelosListagemTabela({ items }: { items: ModeloListagemItem[] }
           Reflete só os modelos visíveis com marca e busca atuais.
         </p>
       </div>
+      {bulkDeleteConfirmOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-6">
+          <button
+            type="button"
+            aria-label="Fechar confirmação"
+            className="absolute inset-0 bg-black/50"
+            onClick={() => !pending && setBulkDeleteConfirmOpen(false)}
+          />
+          <div
+            className="relative z-10 w-full max-w-md overflow-hidden rounded-xl border border-gray-200 bg-white p-5 shadow-2xl sm:p-6"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="bulk-delete-modelos-title"
+            aria-describedby="bulk-delete-modelos-desc"
+          >
+            <h3 id="bulk-delete-modelos-title" className="text-base font-semibold text-gray-900">
+              Tem certeza?
+            </h3>
+            <p id="bulk-delete-modelos-desc" className="mt-2 text-sm text-gray-600">
+              Você vai excluir <strong>{selectedInView.length}</strong> modelo
+              {selectedInView.length === 1 ? "" : "s"} visíve
+              {selectedInView.length === 1 ? "l" : "is"} nesta listagem (marca e busca atuais). Compatibilidades de
+              produtos e anos de referência ligados{" "}
+              {selectedInView.length === 1 ? "a ele serão impactados" : "a eles serão impactados"}.{" "}
+              <span className="font-medium text-gray-800">Esta ação não pode ser desfeita.</span>
+            </p>
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setBulkDeleteConfirmOpen(false)}
+                disabled={pending}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-800 transition hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={runBulkDelete}
+                disabled={pending}
+                className="rounded-lg border border-red-300 bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
+              >
+                Sim, excluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {bulkMessage && (
         <p className="px-4 text-xs text-gray-700" role="status">
           {bulkMessage}

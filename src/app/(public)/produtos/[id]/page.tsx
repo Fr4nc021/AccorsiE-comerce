@@ -4,6 +4,7 @@ import { SiteFooter } from "@/components/layout/SiteFooter";
 import { storeShellContent, storeShellInset } from "@/config/storeShell";
 import { ProductMercadoPagoInstallments } from "@/features/produtos/components/ProductMercadoPagoInstallments";
 import { ProductDetailAddToCart } from "@/features/produtos/components/ProductDetailAddToCart";
+import { ProductPhotoCarousel } from "@/features/produtos/components/ProductPhotoCarousel";
 import { ProductsGrid } from "@/features/produtos/components/ProductsGrid";
 import { ProductDescriptionDisplay } from "@/features/produtos/components/ProductDescriptionDisplay";
 import { ProductFreteCepConsult } from "@/features/produtos/components/ProductFreteCepConsult";
@@ -16,26 +17,6 @@ const money = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
 });
-
-/** Quadrado da foto: no `lg` o tamanho fica limitado pela altura da linha (até a quantidade na coluna ao lado). */
-function ProductPhoto({ src, alt }: { src: string | null; alt: string }) {
-  const shell =
-    "flex aspect-square w-full max-w-[min(100%,22rem)] items-center justify-center rounded-lg border border-store-line/80 bg-white p-3 shadow-sm sm:max-w-[26rem] " +
-    "lg:max-h-full lg:max-w-full lg:min-h-0 lg:min-w-0 lg:shadow-none";
-  if (!src) {
-    return (
-      <div className={`text-center text-sm text-store-navy-muted ${shell}`}>
-        Sem foto
-      </div>
-    );
-  }
-  return (
-    <div className={shell}>
-      {/* eslint-disable-next-line @next/next/no-img-element -- URL pode vir de storage externo sem remotePatterns fixos */}
-      <img src={src} alt={alt} className="max-h-full max-w-full object-contain object-center" />
-    </div>
-  );
-}
 
 export async function generateMetadata({ params }: PageProps) {
   const { id } = await params;
@@ -74,7 +55,7 @@ export default async function ProdutoDetalhePage({ params }: PageProps) {
             {/* Mobile: foto → compat → compra (incl. descrição logo após o carrinho). Desktop: esq. foto+compat; dir. coluna única com descrição colada ao botão. */}
             <div className="flex w-full justify-center lg:col-span-5 lg:row-start-1 lg:h-full lg:min-h-0 lg:flex-col lg:items-stretch lg:justify-start">
               <div className="flex min-h-[12rem] w-full min-w-0 flex-1 items-center justify-center lg:min-h-0 lg:flex-1 lg:items-start lg:justify-start">
-                <ProductPhoto src={produto.imageUrl} alt={produto.titulo} />
+                <ProductPhotoCarousel photos={produto.imageUrls} alt={produto.titulo} />
               </div>
             </div>
 

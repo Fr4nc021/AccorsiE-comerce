@@ -14,6 +14,7 @@ import {
   isHtmlDescriptionEmpty,
   sanitizeProductDescriptionHtml,
 } from "@/features/produtos/utils/sanitizeProductDescription";
+import { parseProductPhotoGalleryFromForm } from "@/features/produtos/services/productPhotoGalleryForm";
 import { createClient } from "@/services/supabase/server";
 import { removeProductImageFromStorage } from "@/services/storage/removeProductImage";
 import { revalidatePath } from "next/cache";
@@ -35,7 +36,11 @@ export async function updateProduct(
   const descricao =
     descricaoSan && !isHtmlDescriptionEmpty(descricaoSan) ? descricaoSan : null;
   const valorRaw = String(formData.get("valor") ?? "").replace(",", ".");
-  const foto = String(formData.get("foto") ?? "").trim() || null;
+  const galleryParsed = parseProductPhotoGalleryFromForm(formData);
+  if (!galleryParsed.ok) {
+    return { ok: false, message: galleryParsed.message };
+  }
+  const foto = galleryParsed.principalFoto;
   const em_destaque = formData.get("em_destaque") === "on";
   const quantidadeRaw = String(formData.get("quantidade_estoque") ?? "").trim();
   const compatJson = String(formData.get("compat_json") ?? "");
@@ -84,7 +89,10 @@ export async function updateProduct(
     return { ok: false, message: anosOk.message };
   }
 
-  const { data: before } = await supabase.from("produtos").select("foto").eq("id", id).maybeSingle();
+  const [{ data: before }, { data: beforePhotos }] = await Promise.all([
+    supabase.from("produtos").select("foto").eq("id", id).maybeSingle(),
+    supabase.from("produto_fotos").select("foto").eq("produto_id", id),
+  ]);
 
   const { error: prodError } = await supabase
     .from("produtos")
@@ -113,9 +121,41 @@ export async function updateProduct(
     return { ok: false, message: prodError.message };
   }
 
-  const oldFoto = before?.foto ?? null;
-  if (oldFoto && oldFoto !== foto) {
-    await removeProductImageFromStorage(oldFoto);
+  const { error: delPhotosError } = await supabase.from("produto_fotos").delete().eq("produto_id", id);
+  if (delPhotosError) {
+    return {
+      ok: false,
+      message: `Dados salvos, mas ao atualizar galeria de fotos: ${delPhotosError.message}`,
+    };
+  }
+
+  if (galleryParsed.photos.length > 0) {
+    const { error: photosError } = await supabase.from("produto_fotos").insert(
+      galleryParsed.photos.map((photo) => ({
+        produto_id: id,
+        foto: photo.foto,
+        ordem: photo.ordem,
+        is_principal: photo.is_principal,
+      }))
+    );
+    if (photosError) {
+      return {
+        ok: false,
+        message: `Produto atualizado, mas a galeria de fotos falhou: ${photosError.message}`,
+      };
+    }
+  }
+
+  const previousRefs = new Set<string>();
+  if (before?.foto) previousRefs.add(before.foto);
+  for (const row of beforePhotos ?? []) {
+    if (row.foto) previousRefs.add(row.foto);
+  }
+  const nextRefs = new Set(galleryParsed.photos.map((photo) => photo.foto));
+  for (const ref of previousRefs) {
+    if (!nextRefs.has(ref)) {
+      await removeProductImageFromStorage(ref);
+    }
   }
 
   const { error: delCompError } = await supabase
