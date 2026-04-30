@@ -24,6 +24,7 @@ type ProdutoBaseRow = {
   descricao: string | null;
   desconto_pix_percent?: unknown;
   desconto_cartao_percent?: unknown;
+  compat_todos_modelos?: boolean | null;
 };
 
 type ProdutoSummaryRow = {
@@ -135,7 +136,7 @@ export async function getProductDetailPageData(productId: string): Promise<Produ
     const { data: produtoData, error: produtoError } = await supabase
       .from("produtos")
       .select(
-        "id, titulo, cod_produto, valor, foto, quantidade_estoque, descricao, desconto_pix_percent, desconto_cartao_percent",
+        "id, titulo, cod_produto, valor, foto, quantidade_estoque, descricao, desconto_pix_percent, desconto_cartao_percent, compat_todos_modelos",
       )
       .eq("id", productId)
       .maybeSingle();
@@ -172,10 +173,14 @@ export async function getProductDetailPageData(productId: string): Promise<Produ
       .order("ano_inicio")
       .limit(12);
 
-    const compatLabels = (compatRows ?? [])
-      .map((row) => compatibilityLabelFromRow(row))
-      .filter((v): v is string => Boolean(v));
-    produto.compatibilidades = [...new Set(compatLabels)];
+    if (produtoRow.compat_todos_modelos) {
+      produto.compatibilidades = ["Todos os modelos de veículo"];
+    } else {
+      const compatLabels = (compatRows ?? [])
+        .map((row) => compatibilityLabelFromRow(row))
+        .filter((v): v is string => Boolean(v));
+      produto.compatibilidades = [...new Set(compatLabels)];
+    }
 
     const modeloIdsRes = await supabase
       .from("produto_compatibilidades")

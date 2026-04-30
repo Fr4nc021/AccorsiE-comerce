@@ -8,6 +8,14 @@ function intersectIds(a: string[], bSet: Set<string>): string[] {
   return a.filter((id) => bSet.has(id));
 }
 
+async function fetchCompatTodosModelosIds(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<string[]> {
+  const { data, error } = await supabase.from("produtos").select("id").eq("compat_todos_modelos", true);
+  if (error || !data?.length) return [];
+  return data.map((r) => r.id as string).filter(Boolean);
+}
+
 type ProdutoRow = {
   id: string;
   titulo: string;
@@ -62,8 +70,12 @@ export async function getHomeProducts(opts?: {
         compQuery = compQuery.lte("ano_inicio", ano).gte("ano_fim", ano);
       }
       const { data: compRows, error: compErr } = await compQuery;
-      if (compErr || !compRows?.length) return { destaque: [], vitrine: [] };
-      vehicleIds = [...new Set(compRows.map((r) => r.produto_id as string))];
+      if (compErr) return { destaque: [], vitrine: [] };
+      const ids = new Set((compRows ?? []).map((r) => r.produto_id as string).filter(Boolean));
+      const todosModelosIds = await fetchCompatTodosModelosIds(supabase);
+      for (const pid of todosModelosIds) ids.add(pid);
+      if (ids.size === 0) return { destaque: [], vitrine: [] };
+      vehicleIds = [...ids];
     }
 
     let filterIds: string[] | null = null;

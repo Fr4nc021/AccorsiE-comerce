@@ -81,35 +81,23 @@ export default async function ProdutoDetalhePage({ params }: PageProps) {
               <h1 className="text-2xl font-bold leading-tight text-black sm:text-3xl">{produto.titulo}</h1>
 
               <div className="space-y-2">
-                <div className="flex flex-row flex-wrap items-baseline gap-x-2 gap-y-1">
-                  <p className="shrink-0 text-3xl font-bold leading-none text-[#1d63ed] sm:text-4xl">
-                    {money.format(precoCartao)}
+                <div className="flex flex-row flex-wrap items-end gap-x-3 gap-y-1">
+                  <p
+                    className="shrink-0 text-3xl font-bold leading-none text-[#1d63ed] sm:text-4xl"
+                    aria-label={
+                      pixDestaque
+                        ? `Preço no PIX ${money.format(precoPix)}, desconto de ${produto.desconto_pix_percent}%`
+                        : `Preço no PIX ${money.format(precoPix)}`
+                    }
+                  >
+                    {money.format(precoPix)}
                   </p>
-                  {pixDestaque ? (
-                    <p
-                      className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 border-l border-store-line/60 pl-2.5 text-[0.8125rem] text-store-navy sm:text-sm"
-                      aria-label={`PIX ${money.format(precoPix)}, desconto de ${produto.desconto_pix_percent}%`}
-                    >
-                      <span className="text-base font-bold uppercase tracking-[0.12em] text-store-accent sm:text-lg">
-                        PIX
-                      </span>
-                      <span className="font-semibold tabular-nums text-black">{money.format(precoPix)}</span>
-                      <span className="text-store-navy-muted" aria-hidden>
-                        ·
-                      </span>
-                      <span className="font-medium text-store-accent">−{produto.desconto_pix_percent}%</span>
-                    </p>
-                  ) : (
-                    <p className="border-l border-store-line/60 pl-2.5 text-xs text-store-navy-muted">
-                      <span className="text-base font-bold uppercase tracking-[0.12em] text-store-accent sm:text-lg">
-                        PIX
-                      </span>
-                      <span className="mx-1 text-store-line" aria-hidden>
-                        ·
-                      </span>
-                      no checkout
-                    </p>
-                  )}
+                  <p className="mb-0.5 text-sm font-semibold text-orange-500 sm:text-base">
+                    {pixDestaque ? `PIX (${produto.desconto_pix_percent}% OFF)` : "PIX"}
+                  </p>
+                  <p className="mb-0.5 text-sm font-semibold tabular-nums text-black sm:text-base">
+                    {money.format(produto.valor)}
+                  </p>
                 </div>
                 <p className={`text-sm font-semibold ${outOfStock ? "text-red-700" : "text-emerald-700"}`}>
                   {stockText}

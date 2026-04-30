@@ -47,6 +47,7 @@ export type ProductEditValues = {
   }>;
   quantidade_estoque: number;
   em_destaque: boolean;
+  compat_todos_modelos: boolean;
   categoria_ids: string[];
   compat_rows: ProductCompatRow[];
   prod_comprimento_cm: number | null;
@@ -256,6 +257,7 @@ export function ProductEditForm({
                 <ProductCompatibilidadeFieldset
                   modelos={modelos}
                   initialRows={product.compat_rows}
+                  initialAllModelos={product.compat_todos_modelos}
                   replaceOnSave
                 />
 

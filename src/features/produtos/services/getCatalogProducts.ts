@@ -36,6 +36,14 @@ function intersect(a: string[], bSet: Set<string>): string[] {
   return a.filter((id) => bSet.has(id));
 }
 
+async function fetchCompatTodosModelosIds(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<string[]> {
+  const { data, error } = await supabase.from("produtos").select("id").eq("compat_todos_modelos", true);
+  if (error || !data?.length) return [];
+  return data.map((r) => r.id as string).filter(Boolean);
+}
+
 /** Teto da faixa de preço (slider), em reais, com valor mínimo útil quando não há produtos. */
 export async function getCatalogSliderMax(): Promise<number> {
   try {
@@ -88,8 +96,11 @@ export async function getCatalogProducts(
         .from("produto_compatibilidades")
         .select("produto_id")
         .in("modelo_id", modeloIds);
-      if (compErr || !compRows?.length) return [];
-      const marcaSet = new Set(compRows.map((r) => r.produto_id as string));
+      if (compErr) return [];
+      const marcaSet = new Set((compRows ?? []).map((r) => r.produto_id as string));
+      const todosModelosIds = await fetchCompatTodosModelosIds(supabase);
+      for (const pid of todosModelosIds) marcaSet.add(pid);
+      if (marcaSet.size === 0) return [];
       if (candidateIds) {
         candidateIds = intersect(candidateIds, marcaSet);
         if (candidateIds.length === 0) return [];
@@ -107,8 +118,11 @@ export async function getCatalogProducts(
         compQuery = compQuery.lte("ano_inicio", filters.ano).gte("ano_fim", filters.ano);
       }
       const { data: compRows, error: compErr } = await compQuery;
-      if (compErr || !compRows?.length) return [];
-      const modelSet = new Set(compRows.map((r) => r.produto_id as string));
+      if (compErr) return [];
+      const modelSet = new Set((compRows ?? []).map((r) => r.produto_id as string));
+      const todosModelosIds = await fetchCompatTodosModelosIds(supabase);
+      for (const pid of todosModelosIds) modelSet.add(pid);
+      if (modelSet.size === 0) return [];
       if (candidateIds) {
         candidateIds = intersect(candidateIds, modelSet);
         if (candidateIds.length === 0) return [];

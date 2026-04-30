@@ -44,6 +44,7 @@ export async function updateProduct(
   const em_destaque = formData.get("em_destaque") === "on";
   const quantidadeRaw = String(formData.get("quantidade_estoque") ?? "").trim();
   const compatJson = String(formData.get("compat_json") ?? "");
+  const compat_all_modelos = String(formData.get("compat_all_modelos") ?? "") === "1";
   const categoriaIdsRequested = parseCategoriaIdsFromFormData(formData);
   const embalagemRaw = String(formData.get("embalagem_id") ?? "");
   const pc = parseOptionalDimension(String(formData.get("prod_comprimento_cm") ?? ""));
@@ -84,9 +85,11 @@ export async function updateProduct(
 
   const embalagem_id = await resolveEmbalagemId(supabase, embalagemRaw);
 
-  const anosOk = await assertCompatUsaAnosCadastrados(supabase, compatRows);
-  if (!anosOk.ok) {
-    return { ok: false, message: anosOk.message };
+  if (!compat_all_modelos) {
+    const anosOk = await assertCompatUsaAnosCadastrados(supabase, compatRows);
+    if (!anosOk.ok) {
+      return { ok: false, message: anosOk.message };
+    }
   }
 
   const [{ data: before }, { data: beforePhotos }] = await Promise.all([
@@ -111,6 +114,7 @@ export async function updateProduct(
       embalagem_id,
       desconto_pix_percent,
       desconto_cartao_percent,
+      compat_todos_modelos: compat_all_modelos,
     })
     .eq("id", id);
 
@@ -170,7 +174,7 @@ export async function updateProduct(
     };
   }
 
-  if (compatRows.length > 0) {
+  if (!compat_all_modelos && compatRows.length > 0) {
     const { error: compError } = await supabase.from("produto_compatibilidades").insert(
       compatRows.map((r) => ({
         produto_id: id,

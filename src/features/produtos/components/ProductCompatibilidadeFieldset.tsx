@@ -92,10 +92,12 @@ export function compatRowsFromServer(
 export function ProductCompatibilidadeFieldset({
   modelos,
   initialRows,
+  initialAllModelos,
   replaceOnSave,
 }: {
   modelos: ModeloOption[];
   initialRows?: { modelo_id: string; ano_inicio: string; ano_fim: string }[];
+  initialAllModelos?: boolean;
   /** Na edição: avisa que a lista enviada substitui todas as compatibilidades gravadas. */
   replaceOnSave?: boolean;
 }) {
@@ -106,6 +108,7 @@ export function ProductCompatibilidadeFieldset({
   const [pickerQuery, setPickerQuery] = useState("");
   const [pickerOpen, setPickerOpen] = useState(true);
   const [pickerChecked, setPickerChecked] = useState<Set<string>>(() => new Set());
+  const [allModelos, setAllModelos] = useState(Boolean(initialAllModelos));
 
   const modelosById = useMemo(() => new Map(modelos.map((m) => [m.id, m])), [modelos]);
 
@@ -205,8 +208,28 @@ export function ProductCompatibilidadeFieldset({
           deixe apenas linhas em branco.
         </p>
       )}
+      <label className="mb-4 flex items-start gap-2 rounded-lg border border-admin-accent/25 bg-white/80 p-3 text-sm text-gray-800">
+        <input
+          type="checkbox"
+          className="mt-0.5 rounded border-gray-300"
+          checked={allModelos}
+          onChange={(e) => setAllModelos(e.target.checked)}
+        />
+        <span>
+          <span className="font-semibold text-gray-900">
+            Compatível com todos os modelos (inclusive os novos cadastrados futuramente)
+          </span>
+          <span className="mt-1 block text-xs text-gray-600">
+            Quando ativo, este produto aparece para qualquer veículo selecionado no filtro.
+          </span>
+        </span>
+      </label>
 
-      <div className="mb-4 rounded-lg border border-admin-accent/25 bg-white/90 p-3 shadow-sm">
+      <div
+        className={`mb-4 rounded-lg border border-admin-accent/25 bg-white/90 p-3 shadow-sm ${
+          allModelos ? "pointer-events-none opacity-60" : ""
+        }`}
+      >
         <button
           type="button"
           onClick={() => setPickerOpen((o) => !o)}
@@ -320,6 +343,7 @@ export function ProductCompatibilidadeFieldset({
       </div>
 
       <input type="hidden" name="compat_json" value={compatJson} aria-hidden />
+      <input type="hidden" name="compat_all_modelos" value={allModelos ? "1" : "0"} aria-hidden />
 
       <ul className="flex flex-col gap-4">
         {rows.map((row, index) => {

@@ -57,6 +57,13 @@ export async function fetchProductIdsMatchingSearchTerm(
     for (const row of comp ?? []) {
       if (row.produto_id) ids.add(row.produto_id as string);
     }
+    const { data: todosModelosRows } = await supabase
+      .from("produtos")
+      .select("id")
+      .eq("compat_todos_modelos", true);
+    for (const row of todosModelosRows ?? []) {
+      if (row.id) ids.add(row.id as string);
+    }
   }
 
   return [...ids];

@@ -59,7 +59,7 @@ export default async function EditProdutoPage({ params }: PageProps) {
     const { data: produto, error: prodError } = await supabase
       .from("produtos")
       .select(
-        "id, titulo, cod_produto, descricao, valor, foto, quantidade_estoque, em_destaque, prod_comprimento_cm, prod_largura_cm, prod_altura_cm, prod_peso_kg, embalagem_id, desconto_pix_percent, desconto_cartao_percent"
+        "id, titulo, cod_produto, descricao, valor, foto, quantidade_estoque, em_destaque, compat_todos_modelos, prod_comprimento_cm, prod_largura_cm, prod_altura_cm, prod_peso_kg, embalagem_id, desconto_pix_percent, desconto_cartao_percent"
       )
       .eq("id", id)
       .maybeSingle();
@@ -123,6 +123,7 @@ export default async function EditProdutoPage({ params }: PageProps) {
         })),
         quantidade_estoque: p.quantidade_estoque,
         em_destaque: Boolean(p.em_destaque),
+        compat_todos_modelos: Boolean((p as { compat_todos_modelos?: boolean | null }).compat_todos_modelos),
         categoria_ids: catLinkErr ? [] : (catLinkRows ?? []).map((r) => r.categoria_id),
         compat_rows: (compRows ?? []).map((c) => ({
           modelo_id: c.modelo_id,
