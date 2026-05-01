@@ -35,12 +35,13 @@ export function PedidoLogisticaForm({ pedido }: { pedido: AdminPedidoDetailWithI
   const [printState, printAction, printPending] = useActionState(imprimirDocumentosMelhorEnvioAction, null);
 
   return (
-    <form action={formAction} className="space-y-5">
-      <input type="hidden" name="pedido_id" value={pedido.id} />
-
+    <div className="space-y-5">
       <PedidoMelhorEnvioFluxoAutomatico pedidoId={pedido.id} retiradaLoja={pedido.retirada_loja === true} />
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <form action={formAction} className="space-y-5">
+        <input type="hidden" name="pedido_id" value={pedido.id} />
+
+        <div className="grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2 rounded-lg border border-amber-100 bg-amber-50/80 px-4 py-3">
           <label className="flex cursor-pointer items-start gap-3 text-sm text-gray-800">
             <input
@@ -271,6 +272,7 @@ export function PedidoLogisticaForm({ pedido }: { pedido: AdminPedidoDetailWithI
           </p>
         ) : null}
       </div>
-    </form>
+      </form>
+    </div>
   );
 }
