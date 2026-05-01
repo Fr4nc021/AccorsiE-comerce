@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 
 import { sendPedidoTransactionalEmail } from "@/services/email/transactionalPedidoEmail";
 import { createAdminClient } from "@/services/supabase/admin";
+import { mercadoPagoAmountMatchesPedidoTotal } from "@/services/mercadopago/amountsMatch";
 import { getPayment } from "@/services/mercadopago/client";
 
 export const dynamic = "force-dynamic";
@@ -126,12 +127,6 @@ function parsePaymentNotification(
   }
 
   return null;
-}
-
-function amountsMatch(mpAmount: number, pedidoTotal: string | number): boolean {
-  const pedido = typeof pedidoTotal === "number" ? pedidoTotal : Number(pedidoTotal);
-  if (!Number.isFinite(pedido) || !Number.isFinite(mpAmount)) return false;
-  return Math.abs(Math.round(mpAmount * 100) - Math.round(pedido * 100)) <= 1;
 }
 
 export async function POST(request: Request) {
@@ -263,7 +258,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, ignored: true }, { status: 200 });
   }
 
-  if (!amountsMatch(txAmount, pedido.total)) {
+  if (!mercadoPagoAmountMatchesPedidoTotal(txAmount, pedido.total)) {
     return NextResponse.json({ ok: true, ignored: true }, { status: 200 });
   }
 

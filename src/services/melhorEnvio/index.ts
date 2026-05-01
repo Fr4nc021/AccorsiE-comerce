@@ -4,6 +4,7 @@ export {
 } from "./ensureMelhorEnvioAccessToken";
 export {
   createOrder,
+  fetchMelhorEnvioBalance,
   getMelhorEnvioConfigFromEnv,
   MELHOR_ENVIO_DISABLED_MESSAGE,
   purchaseShipment,
@@ -11,7 +12,7 @@ export {
   requestShipmentDocuments,
   generateShipmentLabel,
 } from "./melhorEnvioClient";
-export type { MelhorEnvioClientConfig } from "./melhorEnvioClient";
+export type { MelhorEnvioBalanceResult, MelhorEnvioClientConfig } from "./melhorEnvioClient";
 export {
   exchangeMelhorEnvioAuthorizationCode,
   melhorEnvioAuthorizedJsonHeaders,

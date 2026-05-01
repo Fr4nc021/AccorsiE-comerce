@@ -2,8 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { MelhorEnvioSaldoPanel } from "@/features/pedidos-admin/components/MelhorEnvioSaldoPanel";
 import { PedidoLogisticaForm } from "@/features/pedidos-admin/components/PedidoLogisticaForm";
+import { PedidoMercadoPagoSyncButton } from "@/features/pedidos-admin/components/PedidoMercadoPagoSyncButton";
 import { getPedidoAdminByIdWithItens } from "@/features/pedidos-admin/services/getPedidoAdminByIdWithItens";
+import { ensureMelhorEnvioAccessToken, fetchMelhorEnvioBalance } from "@/services/melhorEnvio";
 import {
   formatCep,
   formatPedidoDate,
@@ -21,6 +24,28 @@ const logisticaLabel: Record<PedidoLogisticaStatus, string> = {
   postado: "Postado",
   entregue: "Entregue",
 };
+
+async function loadMelhorEnvioSaldoInicial(): Promise<{
+  data: { balance: number; reserved: number; debts: number } | null;
+  error: string | null;
+}> {
+  try {
+    const token = await ensureMelhorEnvioAccessToken();
+    const res = await fetchMelhorEnvioBalance(token);
+    if (!res.ok) {
+      return { data: null, error: res.message };
+    }
+    return {
+      data: { balance: res.balance, reserved: res.reserved, debts: res.debts },
+      error: null,
+    };
+  } catch (e) {
+    return {
+      data: null,
+      error: e instanceof Error ? e.message : "Não foi possível carregar o saldo do Melhor Envio.",
+    };
+  }
+}
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { id } = await params;
@@ -45,6 +70,8 @@ export default async function AdminPedidoDetailPage({ params }: PageProps) {
   if (!pedido) {
     notFound();
   }
+
+  const meSaldo = await loadMelhorEnvioSaldoInicial();
 
   return (
     <div className="space-y-8">
@@ -123,6 +150,7 @@ export default async function AdminPedidoDetailPage({ params }: PageProps) {
               </dd>
             </div>
           </dl>
+          <PedidoMercadoPagoSyncButton pedidoId={pedido.id} />
         </div>
       </section>
 
@@ -201,6 +229,7 @@ export default async function AdminPedidoDetailPage({ params }: PageProps) {
         <h2 className="text-base font-semibold text-gray-900">Logística</h2>
         <p className="mt-1 text-sm text-gray-500">Rastreio e dados de envio exibidos ao cliente quando integrados.</p>
         <div className="mt-6">
+          <MelhorEnvioSaldoPanel initial={meSaldo.data} initialError={meSaldo.error} />
           <PedidoLogisticaForm pedido={pedido} />
         </div>
       </section>

@@ -31,6 +31,8 @@ export type MercadoPagoPaymentResource = {
   external_reference?: string | null;
   transaction_amount?: number;
   currency_id?: string;
+  date_created?: string | null;
+  date_last_updated?: string | null;
 };
 
 export type MercadoPagoClientConfig = {
@@ -182,6 +184,75 @@ export async function getPayment(
   }
 
   return { ok: true, payment };
+}
+
+type PaymentsSearchResponse = {
+  results?: MercadoPagoPaymentResource[];
+  paging?: { total?: number };
+};
+
+/**
+ * Lista pagamentos por `external_reference` (ex.: UUID do pedido na preferência).
+ * `GET /v1/payments/search`
+ */
+export async function searchPaymentsByExternalReference(
+  externalReference: string,
+  config: MercadoPagoClientConfig,
+): Promise<
+  | { ok: true; results: MercadoPagoPaymentResource[] }
+  | { ok: false; status: number; detail: string }
+> {
+  const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const qs = new URLSearchParams({
+    sort: "date_created",
+    criteria: "desc",
+    external_reference: externalReference.trim(),
+    limit: "30",
+  });
+  const url = `${MERCADOPAGO_API_BASE}${PAYMENTS_V1_PATH}/search?${qs.toString()}`;
+
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(
+      url,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${config.accessToken}`,
+        },
+        cache: "no-store",
+      },
+      timeoutMs,
+    );
+  } catch (e) {
+    const detail = isAbortError(e)
+      ? "Tempo esgotado ao buscar pagamentos no Mercado Pago."
+      : "Falha de rede ao buscar pagamentos no Mercado Pago.";
+    return { ok: false, status: 0, detail };
+  }
+
+  let json: unknown;
+  try {
+    json = await res.json();
+  } catch {
+    return {
+      ok: false,
+      status: res.status,
+      detail: res.statusText || "Resposta inválida do Mercado Pago.",
+    };
+  }
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      status: res.status,
+      detail: parseErrorDetail(json, res.statusText),
+    };
+  }
+
+  const body = json as PaymentsSearchResponse;
+  const results = Array.isArray(body.results) ? body.results : [];
+  return { ok: true, results };
 }
 
 export function isTestAccessToken(token: string): boolean {

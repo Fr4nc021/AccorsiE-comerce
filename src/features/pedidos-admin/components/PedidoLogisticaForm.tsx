@@ -189,7 +189,9 @@ export function PedidoLogisticaForm({ pedido }: { pedido: AdminPedidoDetailWithI
       <div className="rounded-lg border border-gray-200 bg-gray-50/70 p-4">
         <h3 className="text-sm font-semibold text-gray-900">Ações Melhor Envio</h3>
         <p className="mt-1 text-xs text-gray-600">
-          Use após salvar o ID Melhor Envio. A impressão pode retornar links de etiqueta e declaração de conteúdo.
+          O checkout não cria envio no Melhor Envio: use o ID do carrinho/envio criado no painel Melhor Envio (ou API)
+          e cole no campo &quot;ID Melhor Envio&quot;. As ações abaixo usam esse valor ao enviar o formulário e gravam
+          no pedido se ainda não estiver salvo. A impressão pode retornar links de etiqueta e declaração de conteúdo.
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <button

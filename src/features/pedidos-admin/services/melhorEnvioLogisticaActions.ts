@@ -47,6 +47,13 @@ function getPedidoId(formData: FormData): string {
   return String(formData.get("pedido_id") ?? "").trim();
 }
 
+/** ID no formulário (submit atual) ou o já salvo no pedido. */
+function resolveMelhorEnvioId(formData: FormData, saved: string | null): string {
+  const fromForm = String(formData.get("melhor_envio_id") ?? "").trim();
+  if (fromForm) return fromForm;
+  return (saved ?? "").trim();
+}
+
 function resultError(message: string): MelhorEnvioLogisticaActionState {
   return { error: message };
 }
@@ -72,12 +79,16 @@ export async function comprarEnvioMelhorEnvioAction(
 
   const pedido = await getPedidoLogisticaRow(pedidoId);
   if (!pedido) return resultError("Pedido não encontrado.");
-  if (!pedido.melhor_envio_id?.trim()) {
-    return resultError("Preencha e salve o ID Melhor Envio antes de comprar o envio.");
+  const melhorEnvioId = resolveMelhorEnvioId(formData, pedido.melhor_envio_id);
+  if (!melhorEnvioId) {
+    return resultError("Preencha o ID Melhor Envio no campo acima (não é necessário clicar em Salvar antes).");
+  }
+  if (melhorEnvioId !== (pedido.melhor_envio_id ?? "").trim()) {
+    await patchPedidoLogistica(pedidoId, { melhor_envio_id: melhorEnvioId });
   }
 
   const token = await ensureMelhorEnvioAccessToken();
-  const result = await purchaseShipment(pedido.melhor_envio_id, { token });
+  const result = await purchaseShipment(melhorEnvioId, { token });
   if (!result.ok) {
     return resultError(`${resolveFriendlyError(result.code)} ${result.message}`);
   }
@@ -103,12 +114,16 @@ export async function gerarEtiquetaMelhorEnvioAction(
 
   const pedido = await getPedidoLogisticaRow(pedidoId);
   if (!pedido) return resultError("Pedido não encontrado.");
-  if (!pedido.melhor_envio_id?.trim()) {
-    return resultError("Preencha e salve o ID Melhor Envio antes de gerar etiqueta.");
+  const melhorEnvioId = resolveMelhorEnvioId(formData, pedido.melhor_envio_id);
+  if (!melhorEnvioId) {
+    return resultError("Preencha o ID Melhor Envio no campo acima (não é necessário clicar em Salvar antes).");
+  }
+  if (melhorEnvioId !== (pedido.melhor_envio_id ?? "").trim()) {
+    await patchPedidoLogistica(pedidoId, { melhor_envio_id: melhorEnvioId });
   }
 
   const token = await ensureMelhorEnvioAccessToken();
-  const result = await generateShipmentLabel(pedido.melhor_envio_id, { token });
+  const result = await generateShipmentLabel(melhorEnvioId, { token });
   if (!result.ok) {
     return resultError(`${resolveFriendlyError(result.code)} ${result.message}`);
   }
@@ -140,12 +155,16 @@ export async function imprimirDocumentosMelhorEnvioAction(
 
   const pedido = await getPedidoLogisticaRow(pedidoId);
   if (!pedido) return resultError("Pedido não encontrado.");
-  if (!pedido.melhor_envio_id?.trim()) {
-    return resultError("Preencha e salve o ID Melhor Envio antes de imprimir documentos.");
+  const melhorEnvioId = resolveMelhorEnvioId(formData, pedido.melhor_envio_id);
+  if (!melhorEnvioId) {
+    return resultError("Preencha o ID Melhor Envio no campo acima (não é necessário clicar em Salvar antes).");
+  }
+  if (melhorEnvioId !== (pedido.melhor_envio_id ?? "").trim()) {
+    await patchPedidoLogistica(pedidoId, { melhor_envio_id: melhorEnvioId });
   }
 
   const token = await ensureMelhorEnvioAccessToken();
-  const result = await requestShipmentDocuments(pedido.melhor_envio_id, { token });
+  const result = await requestShipmentDocuments(melhorEnvioId, { token });
   if (!result.ok) {
     return resultError(`${resolveFriendlyError(result.code)} ${result.message}`);
   }

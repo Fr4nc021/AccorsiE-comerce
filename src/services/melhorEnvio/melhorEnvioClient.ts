@@ -6,6 +6,7 @@
 import {
   melhorEnvioAuthorizedJsonHeaders,
   resolveMelhorEnvioOAuthBaseUrl,
+  resolveMelhorEnvioUserAgent,
 } from "./oauthToken";
 import type {
   MelhorEnvioCreateOrderInput,
@@ -68,6 +69,92 @@ function quoteFail(
 
 function isEnabled(config: MelhorEnvioClientConfig): boolean {
   return Boolean(config.token?.trim());
+}
+
+export type MelhorEnvioBalanceResult =
+  | { ok: true; balance: number; reserved: number; debts: number }
+  | { ok: false; code: "network_error" | "api_error" | "invalid_response"; message: string };
+
+/**
+ * Saldo da Melhor Carteira (`GET /api/v2/me/balance`).
+ * Requer token OAuth com permissões da conta (mesmo Bearer das demais rotas `/me`).
+ */
+export async function fetchMelhorEnvioBalance(accessToken: string): Promise<MelhorEnvioBalanceResult> {
+  const token = accessToken.trim();
+  if (!token) {
+    return { ok: false, code: "invalid_response", message: "Token ausente." };
+  }
+  const base = resolveMelhorEnvioOAuthBaseUrl();
+  const url = `${base}/api/v2/me/balance`;
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+        "User-Agent": resolveMelhorEnvioUserAgent(),
+      },
+      cache: "no-store",
+    });
+  } catch {
+    return { ok: false, code: "network_error", message: "Falha de rede ao consultar saldo no Melhor Envio." };
+  }
+
+  let json: unknown;
+  try {
+    json = await response.json();
+  } catch {
+    return {
+      ok: false,
+      code: "invalid_response",
+      message: "Resposta inválida do Melhor Envio ao consultar saldo.",
+    };
+  }
+
+  if (!response.ok) {
+    const msg =
+      json && typeof json === "object" && json !== null && "message" in json
+        ? String((json as { message?: unknown }).message ?? "").trim()
+        : `HTTP ${response.status}`;
+    return {
+      ok: false,
+      code: "api_error",
+      message: msg || `Melhor Envio rejeitou a consulta de saldo (HTTP ${response.status}).`,
+    };
+  }
+
+  const o = json as Record<string, unknown>;
+  const balance = typeof o.balance === "number" && Number.isFinite(o.balance) ? o.balance : Number.NaN;
+  const reservedRaw = o.reserved;
+  const debtsRaw = o.debts;
+  const reserved =
+    typeof reservedRaw === "number" && Number.isFinite(reservedRaw)
+      ? Math.round(reservedRaw)
+      : typeof reservedRaw === "string" && reservedRaw.trim() !== ""
+        ? Math.round(Number.parseFloat(reservedRaw.replace(",", ".")))
+        : 0;
+  const debts =
+    typeof debtsRaw === "number" && Number.isFinite(debtsRaw)
+      ? Math.round(debtsRaw)
+      : typeof debtsRaw === "string" && debtsRaw.trim() !== ""
+        ? Math.round(Number.parseFloat(debtsRaw.replace(",", ".")))
+        : 0;
+
+  if (!Number.isFinite(balance)) {
+    return {
+      ok: false,
+      code: "invalid_response",
+      message: "Resposta de saldo do Melhor Envio em formato inesperado.",
+    };
+  }
+
+  return {
+    ok: true,
+    balance,
+    reserved: Number.isFinite(reserved) ? reserved : 0,
+    debts: Number.isFinite(debts) ? debts : 0,
+  };
 }
 
 function resolveShipmentCalculateUrl(): string {
