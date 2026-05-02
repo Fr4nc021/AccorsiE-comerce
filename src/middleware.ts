@@ -91,8 +91,9 @@ export async function middleware(request: NextRequest) {
       .eq("id", user.id)
       .maybeSingle();
 
-    profileRole = profile?.role ?? null;
-    return profileRole;
+    const resolved: string | null = profile?.role ?? null;
+    profileRole = resolved;
+    return resolved;
   };
 
   if (MAINTENANCE_MODE && !isMaintenanceBypassPath(pathname)) {
