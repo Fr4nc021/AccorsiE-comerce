@@ -1,7 +1,14 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type KeyboardEvent,
+} from "react";
 
 const DEBOUNCE_MS = 350;
 
@@ -17,13 +24,16 @@ function IconSearch({ className }: { className?: string }) {
 type StoreProductSearchBarProps = {
   /** Classes no wrapper externo (largura, alinhamento). */
   className?: string;
+  /** Foca o campo ao montar (ex.: modal de busca no cabeçalho). */
+  autoFocus?: boolean;
 };
 
 /**
- * Busca de produtos: atualiza `?q=` na URL (home ou /produtos) com debounce,
- * no mesmo estilo visual da home (fundo escuro).
+ * Busca de produtos: atualiza `?q=` na URL com debounce.
+ * Enter confirma e leva a `/produtos?…` com o texto (preserva outros params da URL quando existirem);
+ * na página `/produtos`, Enter só atualiza a query na própria rota.
  */
-export function StoreProductSearchBar({ className }: StoreProductSearchBarProps) {
+export function StoreProductSearchBar({ className, autoFocus = false }: StoreProductSearchBarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const sp = useSearchParams();
@@ -59,6 +69,32 @@ export function StoreProductSearchBar({ className }: StoreProductSearchBarProps)
     [pathname, router, sp]
   );
 
+  /** Enter: ir ao catálogo `/produtos` com a busca (e params atuais da URL); na própria página de produtos só confirma na URL. */
+  const commitSearchEnter = useCallback(
+    (nextQ: string) => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = undefined;
+      }
+
+      const t = nextQ.trim();
+      const p = new URLSearchParams(sp.toString());
+      if (t) p.set("q", t);
+      else p.delete("q");
+      const qs = p.toString();
+      lastPushedRef.current = t || null;
+
+      const onProdutosCatalog = pathname === "/produtos";
+      if (onProdutosCatalog) {
+        router.replace(qs ? `/produtos?${qs}` : "/produtos", { scroll: false });
+        return;
+      }
+
+      router.push(qs ? `/produtos?${qs}` : "/produtos");
+    },
+    [pathname, router, sp]
+  );
+
   useEffect(() => {
     return () => {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
@@ -72,16 +108,24 @@ export function StoreProductSearchBar({ className }: StoreProductSearchBarProps)
     debounceTimerRef.current = setTimeout(() => pushUrl(v), DEBOUNCE_MS);
   };
 
+  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    commitSearchEnter(e.currentTarget.value);
+  };
+
   return (
     <div className={["relative min-w-0", className].filter(Boolean).join(" ")}>
       <input
         type="search"
         value={value}
         onChange={onChange}
+        onKeyDown={onKeyDown}
         placeholder="Buscar produtos"
         className="w-full rounded-full border border-transparent bg-[#3a3a3a] py-3.5 pl-5 pr-12 text-sm text-white placeholder:text-zinc-400 outline-none ring-0 transition focus:border-store-accent/40 focus:ring-2 focus:ring-store-accent/25"
         aria-label="Buscar produtos"
         autoComplete="off"
+        autoFocus={autoFocus}
       />
       <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-white/90">
         <IconSearch className="h-5 w-5" />

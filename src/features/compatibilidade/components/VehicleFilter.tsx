@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { Suspense, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import type { TipoVeiculoModelo } from "@/features/compatibilidade/constants/tipoVeiculoModelo";
@@ -11,7 +11,6 @@ import type {
   VehicleFilterModelo,
 } from "@/features/compatibilidade/services/getVehicleFilterCatalogData";
 import { storeShellContent, storeShellInset } from "@/config/storeShell";
-import { StoreProductSearchBar } from "@/components/store/StoreProductSearchBar";
 import { PlateVehicleFinder } from "@/features/compatibilidade/components/PlateVehicleFinder";
 
 type VehicleCategory = "carros" | "caminhoes";
@@ -53,8 +52,14 @@ function IconSearch({ className }: { className?: string }) {
   );
 }
 
-const selectClass =
-  "w-full appearance-none rounded-xl border border-store-line/80 bg-store-subtle px-3.5 py-2.5 pr-10 text-sm text-store-navy shadow-sm outline-none transition focus:border-store-navy-muted focus:ring-2 focus:ring-store-navy/20";
+/** Altura única da faixa de filtro (placa, selects, abas): h-9 + tipografia alinhada. */
+const selectClassBase =
+  "h-9 w-full appearance-none rounded-full border border-store-line/80 bg-store-subtle py-0 pl-3 pr-9 text-[11px] font-semibold leading-none text-store-navy shadow-sm outline-none transition focus:border-store-navy-muted focus:ring-2 focus:ring-store-navy/20 sm:pl-3.5 sm:pr-10 sm:text-xs";
+
+/** Marca / Modelo: texto centralizado no campo (Ano permanece à esquerda). */
+const selectClassMarcaModelo = `${selectClassBase} text-center`;
+
+const selectClass = selectClassBase;
 
 const tabIndex = (id: VehicleCategory) => TABS.findIndex((t) => t.id === id);
 
@@ -96,16 +101,18 @@ function VehicleFilterFields({
   const aid = `${baseId}-ano${idSuffix}`;
 
   return (
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:gap-5">
-      <div className="grid flex-1 gap-4 sm:grid-cols-3">
+<div className="flex flex-col gap-3 lg:flex-1 lg:min-h-0 lg:flex-row lg:items-center lg:gap-4">      <div className="grid flex-1 gap-3 sm:grid-cols-3">
         <div className="min-w-0">
-          <label htmlFor={mid} className="mb-1.5 block text-sm font-medium text-white">
+          <label
+            htmlFor={mid}
+            className="mb-0.5 block text-center text-[10px] font-medium leading-tight text-white sm:text-[11px]"
+          >
             Marca
           </label>
           <div className="relative">
             <select
               id={mid}
-              className={selectClass}
+              className={selectClassMarcaModelo}
               value={marcaId}
               onChange={(e) => onMarcaChange(e.target.value)}
             >
@@ -116,7 +123,7 @@ function VehicleFilterFields({
                 </option>
               ))}
             </select>
-            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-store-navy-muted">
+            <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-store-navy-muted sm:right-3">
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
                 <path
                   d="M2.5 4.25 6 7.75 9.5 4.25"
@@ -130,13 +137,16 @@ function VehicleFilterFields({
           </div>
         </div>
         <div className="min-w-0">
-          <label htmlFor={modid} className="mb-1.5 block text-sm font-medium text-white">
+          <label
+            htmlFor={modid}
+            className="mb-0.5 block text-center text-[10px] font-medium leading-tight text-white sm:text-[11px]"
+          >
             Modelo
           </label>
           <div className="relative">
             <select
               id={modid}
-              className={selectClass}
+              className={selectClassMarcaModelo}
               value={modeloId}
               onChange={(e) => onModeloChange(e.target.value)}
             >
@@ -147,7 +157,7 @@ function VehicleFilterFields({
                 </option>
               ))}
             </select>
-            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-store-navy-muted">
+            <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-store-navy-muted sm:right-3">
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
                 <path
                   d="M2.5 4.25 6 7.75 9.5 4.25"
@@ -161,7 +171,7 @@ function VehicleFilterFields({
           </div>
         </div>
         <div className="min-w-0">
-          <label htmlFor={aid} className="mb-1.5 block text-sm font-medium text-white">
+          <label htmlFor={aid} className="mb-0.5 block text-[10px] font-medium leading-tight text-white sm:text-[11px]">
             Ano
           </label>
           <div className="relative">
@@ -179,7 +189,7 @@ function VehicleFilterFields({
                 </option>
               ))}
             </select>
-            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-store-navy-muted">
+            <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-store-navy-muted sm:right-3">
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
                 <path
                   d="M2.5 4.25 6 7.75 9.5 4.25"
@@ -194,13 +204,13 @@ function VehicleFilterFields({
         </div>
       </div>
 
-      <div className="flex justify-center sm:justify-center lg:shrink-0 lg:pb-0.5">
+      <div className="flex justify-center sm:justify-center lg:shrink-0">
         <button
           type="button"
           onClick={onApply}
           disabled={!canSearch}
           className={[
-            "flex h-12 w-12 items-center justify-center rounded-full text-store-navy shadow-sm transition",
+            "flex h-9 w-9 items-center justify-center rounded-md text-store-navy shadow-sm transition",
             canSearch
               ? "bg-store-subtle hover:bg-white"
               : "cursor-not-allowed bg-store-subtle/50 opacity-60",
@@ -208,7 +218,7 @@ function VehicleFilterFields({
           aria-label="Aplicar filtro de veículo"
           title={canSearch ? "Aplicar filtro de veículo" : "Escolha um modelo"}
         >
-          <IconSearch className="h-5 w-5" />
+          <IconSearch className="h-[1.05rem] w-[1.05rem]" />
         </button>
       </div>
     </div>
@@ -221,7 +231,7 @@ export type VehicleFilterProps = {
   anosByModeloId: VehicleFilterAnosByModelo;
   appliedModeloId: string | null;
   appliedAno: number | null;
-  /** Com busca por texto na home: vitrine entre a barra de pesquisa e “Filtre a sua busca”. */
+  /** Com busca por texto (`?q=`) na home: vitrine entre o bloco da placa e “Filtre a sua busca”. */
   betweenSearchAndFilter?: ReactNode;
 };
 
@@ -391,102 +401,145 @@ export function VehicleFilter({
     };
   }, [mobileFilterOpen]);
 
-  const filterRest = (
-    <>
-      <h2
-        id={`${baseId}-heading`}
-        className="vehicle-filter-heading text-center text-lg font-semibold text-store-navy sm:text-xl"
-      >
-        Filtre a sua busca
-      </h2>
-
-      <div
-        className="mt-5 rounded-full border border-store-line bg-white p-1 shadow-sm"
-        role="tablist"
-        aria-label="Tipo de veículo"
-      >
-        <div className="relative flex">
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-y-0 left-0 z-0 w-1/2 rounded-full bg-store-navy shadow-sm transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
-            style={{ transform: `translateX(calc(${activeTabIndex} * 100%))` }}
-          />
-          {TABS.map(({ id, label }) => {
-            const active = category === id;
-            return (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                aria-label={label}
-                onClick={() => onVehicleTypeTab(id)}
-                className={[
-                  "relative z-10 flex min-h-11 flex-1 items-center justify-center gap-0 rounded-full px-1 py-2 text-sm font-semibold transition-colors duration-200 sm:gap-2 sm:px-4",
-                  active ? "text-store-accent" : "text-store-navy hover:bg-store-subtle/70",
-                ].join(" ")}
-              >
-                <span
-                  className={[
-                    "relative block h-7 w-7 shrink-0 sm:h-[1.35rem] sm:w-[1.35rem]",
-                    !active && "opacity-90",
-                  ].join(" ")}
-                  aria-hidden
-                >
-                  {active ? (
-                    <span
-                      className="absolute inset-0 bg-store-accent"
-                      style={{
-                        WebkitMaskImage: `url(${TAB_ICON_SRC[id]})`,
-                        WebkitMaskSize: "contain",
-                        WebkitMaskRepeat: "no-repeat",
-                        WebkitMaskPosition: "center",
-                        maskImage: `url(${TAB_ICON_SRC[id]})`,
-                        maskSize: "contain",
-                        maskRepeat: "no-repeat",
-                        maskPosition: "center",
-                      }}
-                    />
-                  ) : (
-                    <Image
-                      src={TAB_ICON_SRC[id]}
-                      alt=""
-                      width={TAB_ICON_PX}
-                      height={TAB_ICON_PX}
-                      className="h-full w-full object-contain object-center"
-                      unoptimized
-                    />
-                  )}
-                </span>
-                <span className="hidden truncate sm:inline" aria-hidden>
-                  {label}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Desktop: card sempre visível a partir de sm */}
-      <div className="mt-4 hidden rounded-2xl bg-store-navy px-4 py-5 shadow-md sm:block sm:px-6 sm:py-6">
-        <VehicleFilterFields
-          idSuffix=""
-          baseId={baseId}
-          selectClass={selectClass}
-          marcaId={marcaId}
-          modeloId={modeloId}
-          ano={ano}
-          marcasFiltradas={marcasFiltradas}
-          modelosFiltrados={modelosFiltrados}
-          anosDisponiveis={anosDisponiveis}
-          canSearch={canSearch}
-          onMarcaChange={onMarcaChange}
-          onModeloChange={onModeloChange}
-          onAnoChange={setAno}
-          onApply={onVehicleSearch}
+  const tabIconEl = (id: VehicleCategory, active: boolean, compact?: boolean) => (
+    <span
+      className={[
+        compact
+          ? "relative block h-6 w-6 shrink-0 sm:h-6 sm:w-6"
+          : "relative block h-7 w-7 shrink-0",
+        !active && "opacity-90",
+      ].join(" ")}
+      aria-hidden
+    >
+      {active ? (
+        <span
+          className="absolute inset-0 bg-store-accent"
+          style={{
+            WebkitMaskImage: `url(${TAB_ICON_SRC[id]})`,
+            WebkitMaskSize: "contain",
+            WebkitMaskRepeat: "no-repeat",
+            WebkitMaskPosition: "center",
+            maskImage: `url(${TAB_ICON_SRC[id]})`,
+            maskSize: "contain",
+            maskRepeat: "no-repeat",
+            maskPosition: "center",
+          }}
         />
-      </div>
+      ) : (
+        <Image
+          src={TAB_ICON_SRC[id]}
+          alt=""
+          width={TAB_ICON_PX}
+          height={TAB_ICON_PX}
+          className="h-full w-full object-contain object-center"
+          unoptimized
+        />
+      )}
+    </span>
+  );
 
+  const filterHeading = (
+    <h2
+      id={`${baseId}-heading`}
+      className="vehicle-filter-heading mx-auto w-full text-center text-base font-extrabold text-store-navy sm:text-xl"
+    >
+      Filtre a sua busca
+    </h2>
+  );
+
+  const vehicleTabsHorizontal = (
+    <div
+      className="mt-0 rounded-full border border-store-line bg-white p-1 shadow-sm lg:hidden"
+      role="tablist"
+      aria-label="Tipo de veículo"
+    >
+      <div className="relative flex">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 left-0 z-0 w-1/2 rounded-full bg-store-navy shadow-sm transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+          style={{ transform: `translateX(calc(${activeTabIndex} * 100%))` }}
+        />
+        {TABS.map(({ id, label }) => {
+          const active = category === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              aria-label={label}
+              onClick={() => onVehicleTypeTab(id)}
+              className={[
+                "relative z-10 flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-semibold transition-colors duration-200 sm:gap-2 sm:px-3 sm:text-xs",
+                active ? "text-store-accent" : "text-store-navy hover:bg-store-subtle/70",
+              ].join(" ")}
+            >
+              {tabIconEl(id, active, true)}
+              <span className="min-w-0 truncate" aria-hidden>
+                {label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  const vehicleTabsVertical = (
+    <div
+      className="hidden min-h-0 w-full min-w-0 flex-1 flex-col justify-center gap-2 rounded-3xl border border-store-line bg-white p-1 shadow-sm lg:flex lg:max-w-[min(11.25rem,100%)] lg:shrink-0"
+      role="tablist"
+      aria-label="Tipo de veículo"
+    >
+      {TABS.map(({ id, label }) => {
+        const active = category === id;
+        return (
+          <div key={`v-${id}`} className="flex min-h-0 w-full items-center">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={active}
+              aria-label={label}
+              onClick={() => onVehicleTypeTab(id)}
+              className={[
+                "flex h-9 w-full min-h-0 flex-row items-center justify-start gap-2 rounded-full border px-2.5 text-left text-[11px] font-semibold leading-none shadow-sm transition sm:px-3 sm:text-xs",
+                active
+                  ? "border-store-navy bg-store-navy text-store-accent"
+                  : "border-store-line/80 bg-store-subtle text-store-navy hover:brightness-[0.98]",
+              ].join(" ")}
+            >
+              {tabIconEl(id, active, true)}
+              <span className="min-w-0 flex-1 leading-tight">{label}</span>
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const desktopFilterCard = (
+    <div className="hidden min-h-0 w-full min-w-0 flex-1 flex-col justify-center rounded-2xl bg-store-navy px-3 py-2 shadow-md sm:flex sm:px-4 sm:py-2.5">
+      <VehicleFilterFields
+        idSuffix=""
+        baseId={baseId}
+        selectClass={selectClass}
+        marcaId={marcaId}
+        modeloId={modeloId}
+        ano={ano}
+        marcasFiltradas={marcasFiltradas}
+        modelosFiltrados={modelosFiltrados}
+        anosDisponiveis={anosDisponiveis}
+        canSearch={canSearch}
+        onMarcaChange={onMarcaChange}
+        onModeloChange={onModeloChange}
+        onAnoChange={setAno}
+        onApply={onVehicleSearch}
+      />
+    </div>
+  );
+
+  const mobileFilterSheet = (
+    <>
       {/* Mobile: bottom sheet após toque no tipo de veículo */}
       {mobileFilterOpen ? (
         <div
@@ -546,21 +599,51 @@ export function VehicleFilter({
     </>
   );
 
-  const searchBar = (
+  const plateToolbar = (
+    <PlateVehicleFinder
+      marcas={marcas}
+      modelos={modelos}
+      anosByModeloId={anosByModeloId}
+      onResolvedVehicle={onPlateResolvedVehicle}
+      variant="filterToolbar"
+    />
+  );
+
+  const filterSectionDefault = (
     <>
-      <PlateVehicleFinder
-        marcas={marcas}
-        modelos={modelos}
-        anosByModeloId={anosByModeloId}
-        onResolvedVehicle={onPlateResolvedVehicle}
-      />
-      <div className="relative mx-auto mb-5 w-1/2 min-w-0 max-w-full">
-        <Suspense
-          fallback={<div className="h-12 w-full animate-pulse rounded-full bg-[#3a3a3a]/50" aria-hidden />}
-        >
-          <StoreProductSearchBar />
-        </Suspense>
+      {filterHeading}
+      <div className="mt-4 flex min-h-0 flex-col gap-3 lg:grid lg:min-h-0 lg:grid-cols-[auto_minmax(0,1fr)_minmax(17rem,min(24rem,34%))] lg:items-stretch lg:gap-3 lg:content-stretch">
+        <div className="flex min-h-0 w-full shrink-0 flex-col lg:col-start-1 lg:row-start-1 lg:h-full lg:min-h-0 lg:self-stretch">
+          <div className="flex h-full min-h-0 w-full flex-1 flex-col">{vehicleTabsVertical}</div>
+        </div>
+
+        <div className="flex min-h-0 w-full shrink-0 flex-col lg:col-start-3 lg:row-start-1 lg:h-full lg:min-h-0 lg:min-w-0 lg:self-stretch">
+          <div className="flex h-full min-h-0 w-full flex-1 flex-col">{plateToolbar}</div>
+        </div>
+
+        <div className="lg:hidden">{vehicleTabsHorizontal}</div>
+
+        <div className="flex min-h-0 min-w-0 flex-col lg:col-start-2 lg:row-start-1 lg:h-full lg:min-h-0 lg:self-stretch lg:w-full lg:min-w-0">
+          <div className="flex h-full min-h-0 w-full flex-1 flex-col">{desktopFilterCard}</div>
+        </div>
       </div>
+      {mobileFilterSheet}
+    </>
+  );
+
+  const filterSectionBetween = (
+    <>
+      {filterHeading}
+      <div className="mt-4 flex min-h-0 flex-col gap-3 lg:grid lg:min-h-0 lg:grid-cols-[auto_minmax(0,1fr)] lg:items-stretch lg:gap-3 lg:content-stretch">
+        <div className="flex min-h-0 w-full shrink-0 flex-col lg:col-start-1 lg:row-start-1 lg:h-full lg:min-h-0 lg:self-stretch">
+          <div className="flex h-full min-h-0 w-full flex-1 flex-col">{vehicleTabsVertical}</div>
+        </div>
+        <div className="lg:hidden">{vehicleTabsHorizontal}</div>
+        <div className="flex min-h-0 min-w-0 flex-col lg:col-start-2 lg:row-start-1 lg:h-full lg:min-h-0 lg:self-stretch lg:w-full">
+          <div className="flex h-full min-h-0 w-full flex-1 flex-col">{desktopFilterCard}</div>
+        </div>
+      </div>
+      {mobileFilterSheet}
     </>
   );
 
@@ -572,7 +655,7 @@ export function VehicleFilter({
       >
         <div className={`${storeShellInset} pt-6 sm:pt-8`}>
           <div className={storeShellContent}>
-            <div className="mx-auto max-w-4xl">{searchBar}</div>
+            <div className="mx-auto max-w-6xl">{plateToolbar}</div>
           </div>
         </div>
 
@@ -580,8 +663,8 @@ export function VehicleFilter({
 
         <div className={`${storeShellInset} pb-2 pt-8 sm:pt-10`}>
           <div className={storeShellContent}>
-            <div className="mx-auto max-w-4xl">
-              <div className="animate-vehicle-filter-panel-in">{filterRest}</div>
+            <div className="mx-auto max-w-6xl">
+              <div className="animate-vehicle-filter-panel-in">{filterSectionBetween}</div>
             </div>
           </div>
         </div>
@@ -595,9 +678,8 @@ export function VehicleFilter({
       aria-labelledby={`${baseId}-heading`}
     >
       <div className={storeShellContent}>
-        <div className="mx-auto max-w-4xl">
-          {searchBar}
-          <div className="animate-vehicle-filter-panel-in">{filterRest}</div>
+        <div className="mx-auto max-w-6xl">
+          <div className="animate-vehicle-filter-panel-in">{filterSectionDefault}</div>
         </div>
       </div>
     </section>

@@ -3,8 +3,9 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useId, useRef, useState } from "react";
 
+import { StoreProductSearchBar } from "@/components/store/StoreProductSearchBar";
 import { storeShellContent, storeShellInset } from "@/config/storeShell";
 import { CART_ICON_SRC } from "@/features/carrinho/constants";
 import { useCart } from "@/features/carrinho/CartContext";
@@ -34,6 +35,15 @@ function IconMenu({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
       <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconSearch({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M15 15l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }
@@ -94,6 +104,7 @@ export function StoreNavbar({
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [isDesktopNav, setIsDesktopNav] = useState(false);
   const [garageModalOpen, setGarageModalOpen] = useState(false);
+  const [productSearchOpen, setProductSearchOpen] = useState(false);
   const categoriasWrapRef = useRef<HTMLDivElement>(null);
   const listboxId = useId();
 
@@ -141,7 +152,26 @@ export function StoreNavbar({
     setMobileNavOpen(false);
     setCategoriasOpen(false);
     setGarageModalOpen(false);
+    setProductSearchOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    if (!productSearchOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setProductSearchOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [productSearchOpen]);
+
+  useEffect(() => {
+    if (!productSearchOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [productSearchOpen]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -307,6 +337,15 @@ export function StoreNavbar({
                       Adicione seu veículo
                     </span>
                   </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setProductSearchOpen(true)}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-white/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ring-1 ring-black/30 transition hover:bg-zinc-800 sm:h-10 sm:w-10"
+                  aria-label="Buscar produtos"
+                  title="Buscar produtos"
+                >
+                  <IconSearch className="h-[18px] w-[18px] sm:h-5 sm:w-5" />
                 </button>
                 <Link
                   href="/carrinho"
@@ -474,9 +513,47 @@ export function StoreNavbar({
       </div>
 
       {showHomeBanner ? (
-        <div className="relative left-1/2 mt-3 w-screen max-w-[100vw] -translate-x-1/2 overflow-x-hidden bg-store-navy sm:mt-4">
+        <div className="relative mt-3 w-full overflow-x-hidden bg-store-navy sm:mt-4">
           <div className="relative mx-auto flex w-full max-w-[1920px] justify-center">
             <HomeBannerCarousel srcs={homeBannerSrcs} />
+          </div>
+        </div>
+      ) : null}
+
+      {productSearchOpen ? (
+        <div
+          className="fixed inset-0 z-[140] flex items-start justify-center bg-black/50 p-4 pt-[max(1rem,env(safe-area-inset-top))] sm:items-center sm:pt-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="store-navbar-search-title"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default"
+            aria-label="Fechar busca"
+            onClick={() => setProductSearchOpen(false)}
+          />
+          <div className="relative z-10 w-full max-w-lg rounded-2xl border border-store-line bg-white p-4 shadow-2xl sm:p-5">
+            <div className="flex items-start justify-between gap-3">
+              <h3 id="store-navbar-search-title" className="text-base font-black text-store-navy sm:text-lg">
+                Buscar produtos
+              </h3>
+              <button
+                type="button"
+                onClick={() => setProductSearchOpen(false)}
+                className="rounded-lg border border-store-line px-2 py-1 text-xs font-bold text-store-navy"
+              >
+                Fechar
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-store-navy-muted">A busca atualiza a lista conforme você digita.</p>
+            <div className="mt-4">
+              <Suspense
+                fallback={<div className="h-12 w-full animate-pulse rounded-full bg-zinc-200/80" aria-hidden />}
+              >
+                <StoreProductSearchBar autoFocus className="max-w-none" />
+              </Suspense>
+            </div>
           </div>
         </div>
       ) : null}

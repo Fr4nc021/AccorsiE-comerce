@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { storeShellContent, storeShellInset } from "@/config/storeShell";
 import type { StorePickupAddress } from "@/config/storePickupAddress";
@@ -11,6 +11,7 @@ import { lookupCep } from "@/features/endereco/services/lookupCep";
 import { useFreteQuote } from "@/features/frete/hooks/useFreteQuote";
 import type { CheckoutPayload } from "@/features/checkout/types";
 import { criarPedidoECheckout } from "@/features/checkout/services/criarPedidoECheckout";
+import { previewCupomDesconto } from "@/features/checkout/services/previewCupomDesconto";
 import type { FormaPagamentoCheckout } from "@/features/produtos/utils/paymentDiscount";
 import { unitPriceAfterPaymentDiscount } from "@/features/produtos/utils/paymentDiscount";
 import type { ProfileEndereco } from "@/types/profileDelivery";
@@ -74,7 +75,7 @@ export function CheckoutPage({
   });
 
   const [formError, setFormError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [modoEntrega, setModoEntrega] = useState<ModoEntrega>("envio");
 
   const itensPayload = useMemo(
@@ -84,7 +85,16 @@ export function CheckoutPage({
   const frete = useFreteQuote(itensPayload, cep, modoEntrega === "envio" && hasItems);
   const shipping =
     !hasItems ? 0 : modoEntrega === "retirada" ? 0 : frete.freteValue;
-  const total = subtotal + shipping;
+  const [cupomInput, setCupomInput] = useState("");
+  const [cupomDesconto, setCupomDesconto] = useState<number | null>(null);
+  const [cupomMensagem, setCupomMensagem] = useState<string | null>(null);
+  const [cupomBusy, setCupomBusy] = useState(false);
+  const total = Math.max(0, subtotal + shipping - (cupomDesconto ?? 0));
+
+  useEffect(() => {
+    setCupomDesconto(null);
+    setCupomMensagem(null);
+  }, [subtotal, shipping, itemCount, modoEntrega, frete.selectedId]);
 
   useEffect(() => {
     const cepDigits = cep.replace(/\D/g, "").slice(0, 8);
@@ -144,7 +154,9 @@ export function CheckoutPage({
       return;
     }
 
-    const payload: CheckoutPayload = retirada
+    const codigoCupom = cupomInput.trim();
+
+    const payloadBase = retirada
       ? {
           itens: itensPayload,
           frete: 0,
@@ -176,17 +188,58 @@ export function CheckoutPage({
           uf: uf.trim().toUpperCase().slice(0, 2),
         };
 
-    startTransition(() => {
-      void criarPedidoECheckout(payload)
-        .then((result) => {
-          if (result?.ok === false) {
-            setFormError(result.message);
+    const payload: CheckoutPayload = {
+      ...payloadBase,
+      ...(codigoCupom ? { cupom_codigo: codigoCupom } : {}),
+    };
+
+    setCheckoutBusy(true);
+    void (async () => {
+      try {
+        if (codigoCupom) {
+          const prev = await previewCupomDesconto(codigoCupom, subtotal, shipping);
+          if (!prev.ok) {
+            setFormError(prev.message);
+            return;
           }
-        })
-        .catch(() => {
-          /* redirect() do servidor dispara rejeição controlada */
-        });
-    });
+        }
+        const result = await criarPedidoECheckout(payload);
+        if (result?.ok === false) {
+          setFormError(result.message);
+        }
+      } catch {
+        /* redirect() do servidor dispara rejeição controlada */
+      } finally {
+        setCheckoutBusy(false);
+      }
+    })();
+  }
+
+  async function onAplicarCupom() {
+    setCupomMensagem(null);
+    const c = cupomInput.trim();
+    if (!c) {
+      setCupomDesconto(null);
+      setCupomMensagem("Digite o código do cupom.");
+      return;
+    }
+    if (modoEntrega === "envio" && !frete.selectedOption) {
+      setCupomMensagem("Selecione o frete antes de aplicar o cupom.");
+      return;
+    }
+    setCupomBusy(true);
+    try {
+      const r = await previewCupomDesconto(c, subtotal, shipping);
+      if (r.ok) {
+        setCupomDesconto(r.desconto);
+        setCupomMensagem(`Desconto de ${money.format(r.desconto)} incorporado ao total.`);
+      } else {
+        setCupomDesconto(null);
+        setCupomMensagem(r.message);
+      }
+    } finally {
+      setCupomBusy(false);
+    }
   }
 
   return (
@@ -489,6 +542,51 @@ export function CheckoutPage({
 
               <section
                 className="rounded-sm border border-store-line/80 bg-white p-5 shadow-sm sm:p-6"
+                aria-labelledby={`${baseId}-cupom`}
+              >
+                <h2 id={`${baseId}-cupom`} className="text-lg font-bold text-black">
+                  Cupom de desconto
+                </h2>
+                <p className="mt-1 text-sm text-store-navy-muted">
+                  Opcional. O desconto soma ao que já existe no produto (PIX/cartão) e é validado ao pagar.
+                </p>
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+                  <div className="min-w-0 flex-1">
+                    <label htmlFor={`${baseId}-cupom-input`} className="text-sm font-medium text-store-navy">
+                      Código
+                    </label>
+                    <input
+                      id={`${baseId}-cupom-input`}
+                      name="cupom_codigo"
+                      type="text"
+                      autoComplete="off"
+                      value={cupomInput}
+                      onChange={(e) => setCupomInput(e.target.value.toUpperCase())}
+                      placeholder="Ex.: ACCORSI10"
+                      className={inputClass}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void onAplicarCupom()}
+                    disabled={cupomBusy || !hasItems}
+                    className="shrink-0 rounded-sm border border-store-line bg-white px-4 py-2.5 text-sm font-semibold text-store-navy transition hover:bg-store-subtle disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {cupomBusy ? "Validando…" : "Aplicar"}
+                  </button>
+                </div>
+                {cupomMensagem ? (
+                  <p
+                    className={`mt-3 text-sm ${cupomDesconto != null ? "text-emerald-800" : "text-red-700"}`}
+                    role="status"
+                  >
+                    {cupomMensagem}
+                  </p>
+                ) : null}
+              </section>
+
+              <section
+                className="rounded-sm border border-store-line/80 bg-white p-5 shadow-sm sm:p-6"
                 aria-labelledby={`${baseId}-itens`}
               >
                 <h2 id={`${baseId}-itens`} className="text-lg font-bold text-black">
@@ -588,6 +686,14 @@ export function CheckoutPage({
                     {modoEntrega === "retirada" ? "Retirada na loja" : money.format(shipping)}
                   </dd>
                 </div>
+                {cupomDesconto != null && cupomDesconto > 0 ? (
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-store-navy">Cupom</dt>
+                    <dd className="font-semibold tabular-nums text-emerald-800">
+                      − {money.format(cupomDesconto)}
+                    </dd>
+                  </div>
+                ) : null}
               </dl>
               <div className="my-5 h-px bg-store-accent" aria-hidden />
               <div className="flex items-end justify-between gap-4">
@@ -599,13 +705,13 @@ export function CheckoutPage({
               <button
                 type="submit"
                 disabled={
-                  isPending ||
+                  checkoutBusy ||
                   (modoEntrega === "envio" && !frete.selectedOption) ||
                   (modoEntrega === "retirada" && !lojaRetirada)
                 }
                 className="mt-6 w-full rounded-sm bg-store-accent py-3.5 text-center text-sm font-bold text-black shadow-sm transition enabled:hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-70"
               >
-                {isPending ? "Redirecionando…" : "Ir para pagamento"}
+                {checkoutBusy ? "Redirecionando…" : "Ir para pagamento"}
               </button>
               <p className="mt-3 text-center text-xs text-store-navy-muted">
                 Você será encaminhado ao Mercado Pago para concluir o pagamento com segurança.

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 
 import type { VehicleFilterMarca, VehicleFilterModelo } from "@/features/compatibilidade/services/getVehicleFilterCatalogData";
 import { PLACA_CONSULTA_ANON_LIFETIME_MAX, PLACA_CONSULTA_USER_DAILY_MAX } from "@/lib/placaConsultaQuota";
@@ -26,6 +26,8 @@ type PlateVehicleFinderProps = {
   modelos: VehicleFilterModelo[];
   anosByModeloId: Record<string, number[]>;
   onResolvedVehicle: (modeloId: string, ano: number | null) => void;
+  /** `filterToolbar`: faixa ao lado dos filtros (home). `default`: bloco completo acima. */
+  variant?: "default" | "filterToolbar";
 };
 
 type PendingVehicleMatch = {
@@ -80,8 +82,24 @@ function isValidPlate(plate: string): boolean {
   return /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(plate) || /^[A-Z]{3}[0-9]{4}$/.test(plate);
 }
 
-export function PlateVehicleFinder({ marcas, modelos, anosByModeloId, onResolvedVehicle }: PlateVehicleFinderProps) {
+function IconSearchSymbol({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M15 15l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function PlateVehicleFinder({
+  marcas,
+  modelos,
+  anosByModeloId,
+  onResolvedVehicle,
+  variant = "default",
+}: PlateVehicleFinderProps) {
   const router = useRouter();
+  const placaQuotaDescId = useId();
   const [placa, setPlaca] = useState("");
   const [loading, setLoading] = useState(false);
   const [savingGarage, setSavingGarage] = useState(false);
@@ -275,19 +293,28 @@ export function PlateVehicleFinder({ marcas, modelos, anosByModeloId, onResolved
     }
   };
 
-  return (
-    <section className="mb-5 rounded-2xl bg-[#304375] p-4 text-white shadow-lg sm:p-5">
-      <div className="mx-auto flex w-full max-w-md flex-col items-center text-center">
-        <div className="w-full">
-          <p className="text-base font-extrabold leading-tight sm:text-lg">
-            Digite sua placa e encontre peças compatíveis
+  const quotaSrLabel =
+    sessionLoggedIn
+      ? `Limite: até ${PLACA_CONSULTA_USER_DAILY_MAX} consultas por placa por dia (Brasília).`
+      : `Limite: sem login até ${PLACA_CONSULTA_ANON_LIFETIME_MAX} consulta neste dispositivo.`;
+
+  const toolbarBody = (
+    <>
+      {variant === "filterToolbar" ? (
+        <div className="flex min-h-0 w-full flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:gap-2 sm:py-0 md:gap-3">
+          <p id={placaQuotaDescId} className="sr-only">
+            {quotaSrLabel}
           </p>
-          <p className="mt-2 max-w-sm text-[11px] leading-snug text-white/80">
-            {sessionLoggedIn
-              ? `Você pode fazer até ${PLACA_CONSULTA_USER_DAILY_MAX} consultas por placa por dia (horário de Brasília).`
-              : `Sem login: até ${PLACA_CONSULTA_ANON_LIFETIME_MAX} consulta neste dispositivo. Com conta: até ${PLACA_CONSULTA_USER_DAILY_MAX} por dia.`}
-          </p>
-          <div className="mt-3 flex flex-col items-center gap-1.5 sm:flex-row sm:justify-center sm:gap-2">
+          <div className="my-0.5 mx-1 flex w-full min-w-0 flex-1 items-center justify-center text-center sm:mx-2 sm:my-0 sm:mr-3 sm:w-auto sm:justify-end sm:text-right md:mx-2.5">
+            <p className="m-0 w-full text-[11px] font-bold leading-snug text-white sm:text-xs sm:leading-snug md:text-sm">
+              Digite a sua placa aqui e encontre peças compatíveis
+            </p>
+          </div>
+          <div
+            className="mx-auto hidden h-9 w-px shrink-0 self-center bg-store-accent sm:mx-0 sm:block"
+            aria-hidden
+          />
+          <div className="flex w-full shrink-0 flex-row items-center justify-center gap-1.5 sm:w-auto sm:max-w-[10rem] sm:justify-start">
             <input
               type="text"
               inputMode="text"
@@ -298,43 +325,108 @@ export function PlateVehicleFinder({ marcas, modelos, anosByModeloId, onResolved
               value={placa}
               onChange={(e) => setPlaca(normalizePlateInput(e.target.value))}
               placeholder="ABC1D23"
-              className="h-8 w-full max-w-[7.5rem] rounded-md border border-white/20 bg-white/90 px-2 text-[11px] font-semibold tracking-[0.06em] text-store-navy outline-none ring-0 transition placeholder:text-store-navy/45 focus:border-store-accent/80 focus:bg-white sm:max-w-[8rem]"
+              aria-describedby={placaQuotaDescId}
+              className="h-9 w-[7.25rem] shrink-0 rounded-full border border-white/25 bg-white px-2.5 text-[11px] font-semibold tracking-[0.06em] text-store-navy outline-none transition placeholder:text-store-navy/45 focus:border-store-accent/90 focus:ring-1 focus:ring-store-accent/30 sm:w-[7.5rem] sm:text-xs"
             />
             <button
               type="button"
               disabled={loading}
               onClick={applyFromApi}
-              className="h-8 rounded-md bg-store-accent px-2.5 text-[11px] font-extrabold text-store-navy transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-store-accent text-store-navy shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
+              aria-label={loading ? "Consultando placa" : "Buscar placa"}
+              title={loading ? "Consultando…" : "Buscar placa"}
             >
-              {loading ? "Consultando..." : "Buscar placa"}
+              {loading ? (
+                <span
+                  className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-store-navy border-t-transparent"
+                  aria-hidden
+                />
+              ) : (
+                <IconSearchSymbol className="h-[1.05rem] w-[1.05rem]" />
+              )}
             </button>
           </div>
-          {feedback ? (
-            <div className="mt-2 flex flex-col items-center gap-1">
-              <p className="text-xs text-white/90">{feedback}</p>
-              {lastErrorCode === "PLACA_QUOTA_ANON" ? (
-                <Link
-                  href="/login"
-                  className="text-xs font-bold text-store-accent underline decoration-store-accent/80 underline-offset-2 hover:brightness-110"
-                >
-                  Fazer login ou criar conta
-                </Link>
-              ) : null}
+        </div>
+      ) : (
+        <div className="mx-auto flex w-full max-w-md flex-col items-center text-center">
+          <div className="w-full">
+            <p className="text-base font-extrabold leading-tight sm:text-lg">Digite sua placa e encontre peças compatíveis</p>
+            <p className="mt-2 max-w-sm text-[11px] leading-snug text-white/80">
+              {sessionLoggedIn
+                ? `Você pode fazer até ${PLACA_CONSULTA_USER_DAILY_MAX} consultas por placa por dia (horário de Brasília).`
+                : `Sem login: até ${PLACA_CONSULTA_ANON_LIFETIME_MAX} consulta neste dispositivo. Com conta: até ${PLACA_CONSULTA_USER_DAILY_MAX} por dia.`}
+            </p>
+            <div className="mt-3 flex flex-col items-center gap-1.5 sm:flex-row sm:justify-center sm:gap-2">
+              <input
+                type="text"
+                inputMode="text"
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
+                maxLength={8}
+                value={placa}
+                onChange={(e) => setPlaca(normalizePlateInput(e.target.value))}
+                placeholder="ABC1D23"
+                className="h-8 w-full max-w-[7.5rem] rounded-md border border-white/20 bg-white/90 px-2 text-[11px] font-semibold tracking-[0.06em] text-store-navy outline-none ring-0 transition placeholder:text-store-navy/45 focus:border-store-accent/80 focus:bg-white sm:max-w-[8rem]"
+              />
+              <button
+                type="button"
+                disabled={loading}
+                onClick={applyFromApi}
+                className="h-8 rounded-md bg-store-accent px-2.5 text-[11px] font-extrabold text-store-navy transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {loading ? "Consultando..." : "Buscar placa"}
+              </button>
             </div>
-          ) : null}
-          {pendingMatch ? (
-            <div className="mt-3 rounded-xl border border-white/35 bg-white/10 px-3 py-2.5">
-              <p className="text-xs font-semibold uppercase tracking-wide text-white/75">Veiculo identificado</p>
-              <p className="mt-1 text-sm font-extrabold text-white">
-                Modelo: {vehicleInfo?.modelo ?? pendingMatch.modeloNome}
-                {(vehicleInfo?.ano ?? pendingMatch.ano)
-                  ? ` - Ano: ${vehicleInfo?.ano ?? pendingMatch.ano}`
-                  : " - Ano: nao informado"}
-              </p>
-            </div>
+          </div>
+        </div>
+      )}
+      {feedback ? (
+        <div
+          className={
+            variant === "filterToolbar"
+              ? "mt-2 flex flex-col gap-1 text-left sm:mt-3"
+              : "mt-2 flex flex-col items-center gap-1"
+          }
+        >
+          <p className="text-xs text-white/90">{feedback}</p>
+          {lastErrorCode === "PLACA_QUOTA_ANON" ? (
+            <Link
+              href="/login"
+              className="text-xs font-bold text-store-accent underline decoration-store-accent/80 underline-offset-2 hover:brightness-110"
+            >
+              Fazer login ou criar conta
+            </Link>
           ) : null}
         </div>
-      </div>
+      ) : null}
+      {pendingMatch ? (
+        <div className="mt-2 rounded-xl border border-white/35 bg-white/10 px-3 py-2 sm:mt-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-white/75">Veiculo identificado</p>
+          <p className="mt-1 text-sm font-extrabold text-white">
+            Modelo: {vehicleInfo?.modelo ?? pendingMatch.modeloNome}
+            {(vehicleInfo?.ano ?? pendingMatch.ano)
+              ? ` - Ano: ${vehicleInfo?.ano ?? pendingMatch.ano}`
+              : " - Ano: nao informado"}
+          </p>
+        </div>
+      ) : null}
+    </>
+  );
+
+  return (
+    <section
+      className={
+        variant === "filterToolbar"
+          ? "flex min-h-0 w-full flex-1 flex-col rounded-2xl bg-[#304375] px-3 py-2 text-white shadow-md sm:px-4 sm:py-2 sm:pb-2.5 lg:min-h-0 lg:flex-1 lg:py-2 lg:pl-4 lg:pr-4"
+          : "mb-5 rounded-2xl bg-[#304375] p-4 text-white shadow-lg sm:p-5"
+      }
+    >
+      {variant === "filterToolbar" ? (
+        <div className="flex min-h-0 w-full flex-1 flex-col justify-center">{toolbarBody}</div>
+      ) : (
+        toolbarBody
+      )}
       {modalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
           <div className="w-full max-w-lg rounded-2xl border border-store-line bg-white p-4 text-store-navy shadow-2xl sm:p-5">

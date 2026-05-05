@@ -42,6 +42,14 @@ export function ProductRowActions({ productId }: { productId: string }) {
       />
       <div className="flex flex-wrap justify-end gap-1">
         <Link
+          href={`/admin/produtos/novo?duplicar=${encodeURIComponent(productId)}`}
+          className="inline-flex h-9 items-center justify-center rounded-full px-3 text-xs font-semibold text-admin-accent hover:bg-[#1d63ed]/10"
+          aria-label="Duplicar produto"
+          title="Duplicar"
+        >
+          Duplicar
+        </Link>
+        <Link
           href={`/admin/produtos/${productId}/edit`}
           className="inline-flex h-9 w-9 items-center justify-center rounded-full text-admin-accent hover:bg-[#1d63ed]/10"
           aria-label="Editar produto"

@@ -28,4 +28,6 @@ export type CheckoutPayload = CheckoutEntregaInput & {
   forma_pagamento: FormaPagamentoCheckout;
   /** Sem envio (Correios/Melhor Envio): frete zero e endereço da loja gravado no pedido. */
   retirada_loja?: boolean;
+  /** Código do cupom (opcional); validado na RPC `criar_pedido_checkout`. */
+  cupom_codigo?: string;
 };
