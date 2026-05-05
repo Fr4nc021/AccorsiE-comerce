@@ -8,6 +8,7 @@ import { createAdminClient } from "@/services/supabase/admin";
 import { createClient } from "@/services/supabase/server";
 import { createPreference, isTestAccessToken, pickInitPoint } from "@/services/mercadopago/client";
 import { sendPedidoTransactionalEmail } from "@/services/email/transactionalPedidoEmail";
+import { buildMercadoPagoPreferenceItems } from "@/features/checkout/utils/buildMercadoPagoPreferenceItems";
 
 export type CriarPedidoCheckoutError = { ok: false; message: string };
 
@@ -20,7 +21,9 @@ type PedidoItemRow = {
 
 type PedidoCheckoutRow = {
   frete: string | number;
+  subtotal: string | number;
   total: string | number;
+  desconto_cupom: string | number | null;
 };
 
 function resolveAppBaseUrl(): string {
@@ -198,6 +201,7 @@ export async function criarPedidoECheckout(
   const p_destinatario_documento =
     !retirada && (docOpt.length === 11 || docOpt.length === 14) ? docOpt : null;
 
+  const cupomRaw = (payload.cupom_codigo ?? "").trim();
   const { data: pedidoIdRaw, error: rpcError } = await supabase.rpc("criar_pedido_checkout", {
     p_itens,
     p_frete: retirada ? 0 : payload.frete,
@@ -213,6 +217,7 @@ export async function criarPedidoECheckout(
     p_forma_pagamento: forma,
     p_destinatario_documento,
     p_retirada_loja: retirada,
+    p_cupom_codigo: cupomRaw || null,
   });
 
   if (rpcError) {
@@ -249,7 +254,7 @@ export async function criarPedidoECheckout(
 
   const { data: pedidoRow, error: pedidoError } = await supabase
     .from("pedidos")
-    .select("frete, total")
+    .select("frete, subtotal, total, desconto_cupom")
     .eq("id", pedidoId)
     .single();
 
@@ -262,24 +267,16 @@ export async function criarPedidoECheckout(
 
   const pedidoVals = pedidoRow as PedidoCheckoutRow;
   const freteValor = normalizeMoney(pedidoVals.frete);
+  const descontoCupomVal = normalizeMoney(pedidoVals.desconto_cupom ?? 0);
 
-  const preferenceItems = itens.map((row) => ({
-    title: row.titulo_snapshot.slice(0, 256),
-    description: row.cod_produto_snapshot.slice(0, 256),
-    quantity: row.quantidade,
-    currency_id: "BRL",
-    unit_price: normalizeMoney(row.preco_unitario),
-  }));
-
-  if (freteValor > 0) {
-    preferenceItems.push({
-      title: "Frete",
-      description: "Envio",
-      quantity: 1,
-      currency_id: "BRL",
-      unit_price: freteValor,
-    });
-  }
+  const preferenceItems = buildMercadoPagoPreferenceItems(
+    itens,
+    freteValor,
+    normalizeMoney(pedidoVals.subtotal),
+    normalizeMoney(pedidoVals.frete),
+    normalizeMoney(pedidoVals.total),
+    descontoCupomVal,
+  );
 
   const preferenceBody: Record<string, unknown> = {
     items: preferenceItems,

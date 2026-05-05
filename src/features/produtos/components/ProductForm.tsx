@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState, useState, type FormEvent } from "react";
 import {
   ProductCompatibilidadeFieldset,
+  type CompatRowState,
   type ModeloOption,
 } from "@/features/produtos/components/ProductCompatibilidadeFieldset";
 import { ProductDimensoesFieldset } from "@/features/produtos/components/ProductDimensoesFieldset";
@@ -34,16 +35,45 @@ const fieldClass =
 
 const initialState: CreateProductState | null = null;
 
+type ProductFormInitialValues = {
+  titulo?: string;
+  cod_produto?: string;
+  descricao?: string;
+  valor?: number;
+  quantidade_estoque?: number;
+  desconto_pix_percent?: number;
+  desconto_cartao_percent?: number;
+  foto?: string;
+  fotos?: Array<{ foto: string; is_principal: boolean; ordem: number }>;
+  em_destaque?: boolean;
+  categoria_ids?: string[];
+  compat_rows?: Array<Pick<CompatRowState, "modelo_id" | "ano_inicio" | "ano_fim">>;
+  compat_todos_modelos?: boolean;
+  relacionado_ids?: string[];
+  prod_comprimento_cm?: number | null;
+  prod_largura_cm?: number | null;
+  prod_altura_cm?: number | null;
+  prod_peso_kg?: number | null;
+  embalagem_id?: string | null;
+};
+
+function numOrEmpty(n: number | null | undefined): string {
+  if (n == null || Number.isNaN(Number(n))) return "";
+  return String(n);
+}
+
 export function ProductForm({
   modelos,
   categorias,
   embalagens,
   produtosRelacionadosOpcoes,
+  initialValues,
 }: {
   modelos: ModeloOption[];
   categorias: CategoriaOption[];
   embalagens: EmbalagemOption[];
   produtosRelacionadosOpcoes: ProdutoRelacionadoOption[];
+  initialValues?: ProductFormInitialValues;
 }) {
   const [state, formAction, pending] = useActionState(createProduct, initialState);
   const [activeTab, setActiveTab] = useState<"geral" | "dimensoes" | "embalagem">("geral");
@@ -142,6 +172,7 @@ export function ProductForm({
                   required
                   className={fieldClass}
                   placeholder="Ex.: Pastilha de freio dianteira"
+                  defaultValue={initialValues?.titulo ?? ""}
                 />
               </div>
 
@@ -155,6 +186,7 @@ export function ProductForm({
                   required
                   className={fieldClass}
                   placeholder="Ex.: ACC-001"
+                  defaultValue={initialValues?.cod_produto ?? ""}
                 />
               </div>
 
@@ -162,7 +194,7 @@ export function ProductForm({
                 <label htmlFor="descricao" className="text-sm font-medium text-gray-700">
                   Descrição
                 </label>
-                <ProductDescriptionEditor />
+                <ProductDescriptionEditor initialHtml={initialValues?.descricao ?? ""} />
               </div>
 
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -180,6 +212,7 @@ export function ProductForm({
                       required
                       className={fieldClass}
                       placeholder="0.00"
+                      defaultValue={initialValues?.valor ?? ""}
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
@@ -194,7 +227,7 @@ export function ProductForm({
                       min={0}
                       step={1}
                       required
-                      defaultValue={0}
+                      defaultValue={initialValues?.quantidade_estoque ?? 0}
                       className={fieldClass}
                     />
                   </div>
@@ -213,7 +246,7 @@ export function ProductForm({
                       step="0.01"
                       min={0}
                       max={100}
-                      defaultValue={0}
+                      defaultValue={initialValues?.desconto_pix_percent ?? 0}
                       className={fieldClass}
                       placeholder="0"
                     />
@@ -231,7 +264,7 @@ export function ProductForm({
                       step="0.01"
                       min={0}
                       max={100}
-                      defaultValue={0}
+                      defaultValue={initialValues?.desconto_cartao_percent ?? 0}
                       className={fieldClass}
                       placeholder="0"
                     />
@@ -239,19 +272,44 @@ export function ProductForm({
                   </div>
                 </div>
 
-              <ProductPhotoPanel />
+              <ProductPhotoPanel
+                initialFoto={initialValues?.foto ?? ""}
+                initialFotos={initialValues?.fotos ?? []}
+              />
 
-              <ProductDestaqueField />
+              <ProductDestaqueField defaultChecked={Boolean(initialValues?.em_destaque)} />
 
-              <ProductCategoriasFieldset categorias={categorias} />
+              <ProductCategoriasFieldset
+                categorias={categorias}
+                selectedIds={initialValues?.categoria_ids ?? []}
+              />
 
-              <ProductCompatibilidadeFieldset modelos={modelos} />
+              <ProductCompatibilidadeFieldset
+                modelos={modelos}
+                initialRows={initialValues?.compat_rows ?? []}
+                initialAllModelos={Boolean(initialValues?.compat_todos_modelos)}
+              />
 
-              <ProductRelacionadosFieldset produtos={produtosRelacionadosOpcoes} />
+              <ProductRelacionadosFieldset
+                produtos={produtosRelacionadosOpcoes}
+                defaultSelectedIds={initialValues?.relacionado_ids ?? []}
+              />
             </>
           }
-          dimensoes={<ProductDimensoesFieldset />}
-          embalagem={<ProductEmbalagemFieldset embalagens={embalagens} />}
+          dimensoes={
+            <ProductDimensoesFieldset
+              defaultComprimento={numOrEmpty(initialValues?.prod_comprimento_cm)}
+              defaultLargura={numOrEmpty(initialValues?.prod_largura_cm)}
+              defaultAltura={numOrEmpty(initialValues?.prod_altura_cm)}
+              defaultPeso={numOrEmpty(initialValues?.prod_peso_kg)}
+            />
+          }
+          embalagem={
+            <ProductEmbalagemFieldset
+              embalagens={embalagens}
+              defaultEmbalagemId={initialValues?.embalagem_id ?? ""}
+            />
+          }
         />
 
         <button

@@ -16,6 +16,7 @@ function pageTitle(pathname: string): string {
   if (pathname === "/admin/categorias") return "Categorias";
   if (pathname === "/admin/layout") return "Layout do site";
   if (pathname === "/admin/clientes") return "Clientes";
+  if (pathname === "/admin/cupons") return "Cupons";
   if (pathname === "/admin/produtos/novo") return "Cadastrar produto";
   if (/^\/admin\/produtos\/[^/]+\/edit$/.test(pathname)) return "Editar produto";
   return "Painel";
@@ -186,6 +187,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const categoriasActive = pathname.startsWith("/admin/categorias");
   const layoutSiteActive = pathname.startsWith("/admin/layout");
   const clientesActive = pathname.startsWith("/admin/clientes");
+  const cuponsActive = pathname.startsWith("/admin/cupons");
   const consultaFipeActive = pathname.startsWith("/admin/consulta-fipe");
 
   const navLinkClass = (active: boolean) =>
@@ -252,6 +254,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <Link href="/admin/pedidos" className={navLinkClass(pedidosActive)}>
             <IconShoppingCart className="h-5 w-5 shrink-0 opacity-80" />
             Pedidos
+          </Link>
+          <Link href="/admin/cupons" className={navLinkClass(cuponsActive)}>
+            <IconTag className="h-5 w-5 shrink-0 opacity-80" />
+            Cupons
           </Link>
           <Link href="/admin/clientes" className={navLinkClass(clientesActive)}>
             <IconUsers className="h-5 w-5 shrink-0 opacity-80" />
