@@ -27,7 +27,7 @@ function normalizeMoney(value: string | number): number {
 }
 
 /**
- * @param descontoCupom Desconto já aplicado no pedido (coluna pedidos.desconto_cupom).
+ * @param descontoTotal Soma de descontos já aplicados no pedido (kit + cupom).
  */
 export function buildMercadoPagoPreferenceItems(
   itens: PedidoItemSnapshot[],
@@ -35,13 +35,13 @@ export function buildMercadoPagoPreferenceItems(
   pedidoSubtotal: number,
   pedidoFrete: number,
   pedidoTotal: number,
-  descontoCupom: number,
+  descontoTotal: number,
 ): MercadoPagoPreferenceLine[] {
   const nFreteShown = normalizeMoney(freteValor);
   const nSub = normalizeMoney(pedidoSubtotal);
   const nFreteDb = normalizeMoney(pedidoFrete);
   const nTotal = normalizeMoney(pedidoTotal);
-  const nDesc = normalizeMoney(descontoCupom);
+  const nDesc = normalizeMoney(descontoTotal);
 
   const preferenceItems: MercadoPagoPreferenceLine[] = itens.map((row) => ({
     title: row.titulo_snapshot.slice(0, 256),

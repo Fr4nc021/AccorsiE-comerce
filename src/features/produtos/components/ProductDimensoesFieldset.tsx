@@ -6,11 +6,14 @@ export function ProductDimensoesFieldset({
   defaultLargura = "",
   defaultAltura = "",
   defaultPeso = "",
+  fieldsRequired = true,
 }: {
   defaultComprimento?: string;
   defaultLargura?: string;
   defaultAltura?: string;
   defaultPeso?: string;
+  /** When false (draft products), HTML required is omitted so incomplete drafts can be saved. */
+  fieldsRequired?: boolean;
 }) {
   return (
     <fieldset className="space-y-4 rounded-xl border border-gray-100 bg-gray-50/50 p-4 md:p-5">
@@ -20,7 +23,9 @@ export function ProductDimensoesFieldset({
         peso da caixa.
       </p>
       <p className="text-xs leading-relaxed text-admin-accent">
-        Esses campos são obrigatórios para calcular frete por CEP.
+        {fieldsRequired
+          ? "Esses campos são obrigatórios para calcular frete por CEP."
+          : "Obrigatórios para publicar o produto e calcular frete por CEP."}
       </p>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
@@ -34,7 +39,7 @@ export function ProductDimensoesFieldset({
             inputMode="decimal"
             min={0}
             step="0.01"
-            required
+            required={fieldsRequired}
             defaultValue={defaultComprimento}
             className={fieldClass}
             placeholder="Ex.: 25"
@@ -51,7 +56,7 @@ export function ProductDimensoesFieldset({
             inputMode="decimal"
             min={0}
             step="0.01"
-            required
+            required={fieldsRequired}
             defaultValue={defaultLargura}
             className={fieldClass}
             placeholder="Ex.: 18"
@@ -68,7 +73,7 @@ export function ProductDimensoesFieldset({
             inputMode="decimal"
             min={0}
             step="0.01"
-            required
+            required={fieldsRequired}
             defaultValue={defaultAltura}
             className={fieldClass}
             placeholder="Ex.: 7"
@@ -85,7 +90,7 @@ export function ProductDimensoesFieldset({
             inputMode="decimal"
             min={0}
             step="0.001"
-            required
+            required={fieldsRequired}
             defaultValue={defaultPeso}
             className={fieldClass}
             placeholder="Ex.: 0.850"

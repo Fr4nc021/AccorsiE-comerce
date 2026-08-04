@@ -30,4 +30,6 @@ export type CheckoutPayload = CheckoutEntregaInput & {
   retirada_loja?: boolean;
   /** Código do cupom (opcional); validado na RPC `criar_pedido_checkout`. */
   cupom_codigo?: string;
+  /** Kits aplicados (desconto oficial validado na RPC). */
+  kit_ids?: string[];
 };

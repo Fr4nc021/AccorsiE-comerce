@@ -9,11 +9,13 @@ import {
   parseProductFormPercent,
   parseRelacionadoIdsFromForm,
 } from "@/features/produtos/utils/productFormParsers";
+import { parseProductStatus } from "@/features/produtos/utils/productStatus";
 import { resolveEmbalagemId } from "@/features/produtos/utils/resolveEmbalagemId";
 import {
   isHtmlDescriptionEmpty,
   sanitizeProductDescriptionHtml,
 } from "@/features/produtos/utils/sanitizeProductDescription";
+import { validateProductForPublish } from "@/features/produtos/utils/validateProductForPublish";
 import { parseProductPhotoGalleryFromForm } from "@/features/produtos/services/productPhotoGalleryForm";
 import { createClient } from "@/services/supabase/server";
 import { removeProductImageFromStorage } from "@/services/storage/removeProductImage";
@@ -29,13 +31,17 @@ export async function updateProduct(
 ): Promise<UpdateProductState> {
   await requireAdmin();
   const id = String(formData.get("id") ?? "").trim();
-  const titulo = String(formData.get("titulo") ?? "").trim();
-  const cod_produto = String(formData.get("cod_produto") ?? "").trim();
+  if (!id) return { ok: false, message: "Produto não identificado." };
+
+  const tituloRaw = String(formData.get("titulo") ?? "").trim();
+  const codRaw = String(formData.get("cod_produto") ?? "").trim();
+  const titulo = tituloRaw || null;
+  const cod_produto = codRaw || null;
   const descricaoRaw = String(formData.get("descricao") ?? "").trim();
   const descricaoSan = sanitizeProductDescriptionHtml(descricaoRaw);
   const descricao =
     descricaoSan && !isHtmlDescriptionEmpty(descricaoSan) ? descricaoSan : null;
-  const valorRaw = String(formData.get("valor") ?? "").replace(",", ".");
+  const valorRaw = String(formData.get("valor") ?? "").replace(",", ".").trim();
   const galleryParsed = parseProductPhotoGalleryFromForm(formData);
   if (!galleryParsed.ok) {
     return { ok: false, message: galleryParsed.message };
@@ -54,26 +60,26 @@ export async function updateProduct(
   const pp = parseOptionalDimension(String(formData.get("prod_peso_kg") ?? ""));
   const desconto_pix_percent = parseProductFormPercent(formData.get("desconto_pix_percent"));
   const desconto_cartao_percent = parseProductFormPercent(formData.get("desconto_cartao_percent"));
+
   if (pc === undefined || pl === undefined || pa === undefined || pp === undefined) {
     return { ok: false, message: "Dimensões e peso do produto inválidos (use números ≥ 0 ou vazio)." };
   }
-  if (pc === null || pl === null || pa === null || pp === null) {
-    return {
-      ok: false,
-      message: "Preencha comprimento, largura, altura e peso do produto para cálculo de frete por CEP.",
-    };
+
+  let valor: number | null = null;
+  if (valorRaw) {
+    const parsed = Number.parseFloat(valorRaw);
+    if (Number.isNaN(parsed) || parsed < 0) {
+      return { ok: false, message: "Valor inválido." };
+    }
+    valor = parsed;
   }
 
-  if (!id) return { ok: false, message: "Produto não identificado." };
-  if (!titulo) return { ok: false, message: "Informe o título." };
-  if (!cod_produto) return { ok: false, message: "Informe o código do produto." };
-
-  const valor = Number.parseFloat(valorRaw);
-  if (Number.isNaN(valor) || valor < 0) return { ok: false, message: "Valor inválido." };
-
-  const quantidade_estoque = Number.parseInt(quantidadeRaw, 10);
-  if (Number.isNaN(quantidade_estoque) || quantidade_estoque < 0) {
-    return { ok: false, message: "Quantidade em estoque inválida." };
+  let quantidade_estoque = 0;
+  if (quantidadeRaw) {
+    quantidade_estoque = Number.parseInt(quantidadeRaw, 10);
+    if (Number.isNaN(quantidade_estoque) || quantidade_estoque < 0) {
+      return { ok: false, message: "Quantidade em estoque inválida." };
+    }
   }
 
   const compatParsed = parseCompatibilidadesJson(compatJson);
@@ -83,6 +89,37 @@ export async function updateProduct(
   const compatRows = compatParsed.rows;
 
   const supabase = await createClient();
+
+  const { data: existing, error: existingError } = await supabase
+    .from("produtos")
+    .select("status")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (existingError) return { ok: false, message: existingError.message };
+  if (!existing) return { ok: false, message: "Produto não encontrado." };
+
+  const status = parseProductStatus(existing.status);
+  const isPublished = status === "published";
+
+  if (isPublished) {
+    const validation = validateProductForPublish({
+      titulo,
+      cod_produto,
+      valor,
+      quantidade_estoque,
+      prod_comprimento_cm: pc,
+      prod_largura_cm: pl,
+      prod_altura_cm: pa,
+      prod_peso_kg: pp,
+    });
+    if (!validation.ok) {
+      return {
+        ok: false,
+        message: `Produto publicado: preencha todos os campos obrigatórios antes de salvar. Pendentes: ${validation.pending.join(", ")}.`,
+      };
+    }
+  }
 
   const embalagem_id = await resolveEmbalagemId(supabase, embalagemRaw);
 
@@ -238,8 +275,8 @@ export async function updateProduct(
   revalidatePath("/");
   revalidatePath("/produtos");
   revalidatePath("/admin");
+  revalidatePath("/admin/produtos");
   revalidatePath(`/admin/produtos/${id}/edit`);
-  revalidatePath("/admin/produtos/novo");
   revalidatePath(`/produtos/${id}`);
   return { ok: true, message: "Produto atualizado com sucesso." };
 }

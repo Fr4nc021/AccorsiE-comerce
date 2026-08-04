@@ -28,6 +28,7 @@ type PedidoCheckoutRow = {
   subtotal: string | number;
   total: string | number;
   desconto_cupom: string | number | null;
+  desconto_kit?: string | number | null;
 };
 
 function resolveAppBaseUrl(): string {
@@ -227,6 +228,7 @@ export async function criarPedidoECheckout(
     !retirada && (docOpt.length === 11 || docOpt.length === 14) ? docOpt : null;
 
   const cupomRaw = (payload.cupom_codigo ?? "").trim();
+  const kitIds = [...new Set((payload.kit_ids ?? []).map((id) => id.trim()).filter(Boolean))];
   const { data: pedidoIdRaw, error: rpcError } = await supabase.rpc("criar_pedido_checkout", {
     p_itens,
     p_frete: retirada ? 0 : payload.frete,
@@ -243,6 +245,7 @@ export async function criarPedidoECheckout(
     p_destinatario_documento,
     p_retirada_loja: retirada,
     p_cupom_codigo: cupomRaw || null,
+    p_kit_ids: kitIds.length > 0 ? kitIds : [],
   });
 
   if (rpcError) {
@@ -279,7 +282,7 @@ export async function criarPedidoECheckout(
 
   const { data: pedidoRow, error: pedidoError } = await supabase
     .from("pedidos")
-    .select("frete, subtotal, total, desconto_cupom")
+    .select("frete, subtotal, total, desconto_cupom, desconto_kit")
     .eq("id", pedidoId)
     .single();
 
@@ -293,6 +296,7 @@ export async function criarPedidoECheckout(
   const pedidoVals = pedidoRow as PedidoCheckoutRow;
   const freteValor = normalizeMoney(pedidoVals.frete);
   const descontoCupomVal = normalizeMoney(pedidoVals.desconto_cupom ?? 0);
+  const descontoKitVal = normalizeMoney(pedidoVals.desconto_kit ?? 0);
 
   const preferenceItems = buildMercadoPagoPreferenceItems(
     itens,
@@ -300,7 +304,7 @@ export async function criarPedidoECheckout(
     normalizeMoney(pedidoVals.subtotal),
     normalizeMoney(pedidoVals.frete),
     normalizeMoney(pedidoVals.total),
-    descontoCupomVal,
+    descontoCupomVal + descontoKitVal,
   );
 
   const preferenceBody: Record<string, unknown> = {

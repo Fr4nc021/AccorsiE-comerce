@@ -5,6 +5,7 @@ import {
   PRODUCT_SUMMARY_SELECT,
   type ProductSummaryRow,
 } from "@/features/produtos/utils/mapProductSummaryRow";
+import { PRODUCT_STATUS_PUBLISHED } from "@/features/produtos/utils/productStatus";
 import type { ProductSummary } from "@/types/product";
 
 type ProductDetail = ProductSummary & {
@@ -85,6 +86,7 @@ async function fetchSummariesInOrder(
   const { data, error } = await supabase
     .from("produtos")
     .select(PRODUCT_SUMMARY_SELECT)
+    .eq("status", PRODUCT_STATUS_PUBLISHED)
     .in("id", unique);
   if (error || !data) return [];
   const byId = new Map((data as ProductSummaryRow[]).map((row) => [row.id, toSummary(row)]));
@@ -101,6 +103,7 @@ async function fetchSummariesSorted(
   const { data, error } = await supabase
     .from("produtos")
     .select(PRODUCT_SUMMARY_SELECT)
+    .eq("status", PRODUCT_STATUS_PUBLISHED)
     .in("id", clean)
     .order("titulo")
     .limit(limit);
@@ -118,6 +121,7 @@ export async function getProductDetailPageData(productId: string): Promise<Produ
         `id, titulo, cod_produto, valor, foto, quantidade_estoque, descricao, desconto_pix_percent, desconto_cartao_percent, somente_retirada_loja, compat_todos_modelos`,
       )
       .eq("id", productId)
+      .eq("status", PRODUCT_STATUS_PUBLISHED)
       .maybeSingle();
 
     if (produtoError || !produtoData) {
@@ -238,6 +242,7 @@ export async function getProductDetailPageData(productId: string): Promise<Produ
       const { data: fallbackData } = await supabase
         .from("produtos")
         .select(PRODUCT_SUMMARY_SELECT)
+        .eq("status", PRODUCT_STATUS_PUBLISHED)
         .neq("id", productId)
         .order("titulo")
         .limit(24);

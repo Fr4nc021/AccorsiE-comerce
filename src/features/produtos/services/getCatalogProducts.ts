@@ -6,6 +6,7 @@ import {
   PRODUCT_SUMMARY_SELECT,
   type ProductSummaryRow,
 } from "@/features/produtos/utils/mapProductSummaryRow";
+import { PRODUCT_STATUS_PUBLISHED } from "@/features/produtos/utils/productStatus";
 import type { ProductSummary } from "@/types/product";
 
 function mapRows(rows: ProductSummaryRow[]): ProductSummary[] {
@@ -19,7 +20,11 @@ function intersect(a: string[], bSet: Set<string>): string[] {
 async function fetchCompatTodosModelosIds(
   supabase: Awaited<ReturnType<typeof createClient>>,
 ): Promise<string[]> {
-  const { data, error } = await supabase.from("produtos").select("id").eq("compat_todos_modelos", true);
+  const { data, error } = await supabase
+    .from("produtos")
+    .select("id")
+    .eq("status", PRODUCT_STATUS_PUBLISHED)
+    .eq("compat_todos_modelos", true);
   if (error || !data?.length) return [];
   return data.map((r) => r.id as string).filter(Boolean);
 }
@@ -31,6 +36,7 @@ export async function getCatalogSliderMax(): Promise<number> {
     const { data, error } = await supabase
       .from("produtos")
       .select("valor")
+      .eq("status", PRODUCT_STATUS_PUBLISHED)
       .order("valor", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -127,6 +133,7 @@ export async function getCatalogProducts(
     let produtosQuery = supabase
       .from("produtos")
       .select(PRODUCT_SUMMARY_SELECT)
+      .eq("status", PRODUCT_STATUS_PUBLISHED)
       .order("titulo");
     if (candidateIds) produtosQuery = produtosQuery.in("id", candidateIds);
     if (filters.precoMin != null && filters.precoMin > 0) produtosQuery = produtosQuery.gte("valor", filters.precoMin);
