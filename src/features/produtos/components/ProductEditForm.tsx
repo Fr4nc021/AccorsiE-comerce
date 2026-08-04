@@ -24,7 +24,9 @@ import {
   type ProdutoRelacionadoOption,
 } from "@/features/produtos/components/ProductRelacionadosFieldset";
 import { ProductDescriptionEditor } from "@/features/produtos/components/ProductDescriptionEditor";
+import { ProductPublishActions } from "@/features/produtos/components/ProductPublishActions";
 import { updateProduct, type UpdateProductState } from "@/features/produtos/services/updateProduct";
+import type { ProductStatus } from "@/features/produtos/utils/productStatus";
 
 export type { ModeloOption, CategoriaOption };
 
@@ -39,7 +41,7 @@ export type ProductEditValues = {
   titulo: string;
   cod_produto: string;
   descricao: string;
-  valor: number;
+  valor: number | null;
   foto: string;
   fotos: Array<{
     foto: string;
@@ -47,6 +49,7 @@ export type ProductEditValues = {
     ordem: number;
   }>;
   quantidade_estoque: number;
+  status: ProductStatus;
   em_destaque: boolean;
   somente_retirada_loja: boolean;
   compat_todos_modelos: boolean;
@@ -86,9 +89,12 @@ export function ProductEditForm({
   produtosRelacionadosOpcoes: ProdutoRelacionadoOption[];
 }) {
   const [state, formAction, pending] = useActionState(updateProduct, initialState);
+  const fieldsRequired = product.status === "published";
 
   return (
     <>
+      <ProductPublishActions productId={product.id} status={product.status} />
+
       {state?.ok && (
         <div
           className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4 shadow-sm"
@@ -152,7 +158,7 @@ export function ProductEditForm({
                   <input
                     id="titulo"
                     name="titulo"
-                    required
+                    required={fieldsRequired}
                     defaultValue={product.titulo}
                     className={fieldClass}
                   />
@@ -165,7 +171,7 @@ export function ProductEditForm({
                   <input
                     id="cod_produto"
                     name="cod_produto"
-                    required
+                    required={fieldsRequired}
                     defaultValue={product.cod_produto}
                     className={fieldClass}
                   />
@@ -190,8 +196,8 @@ export function ProductEditForm({
                       inputMode="decimal"
                       step="0.01"
                       min={0}
-                      required
-                      defaultValue={product.valor}
+                      required={fieldsRequired}
+                      defaultValue={product.valor ?? ""}
                       className={fieldClass}
                     />
                   </div>
@@ -206,7 +212,7 @@ export function ProductEditForm({
                       inputMode="numeric"
                       min={0}
                       step={1}
-                      required
+                      required={fieldsRequired}
                       defaultValue={product.quantidade_estoque}
                       className={fieldClass}
                     />
@@ -281,6 +287,7 @@ export function ProductEditForm({
                 defaultLargura={numOrEmpty(product.prod_largura_cm)}
                 defaultAltura={numOrEmpty(product.prod_altura_cm)}
                 defaultPeso={numOrEmpty(product.prod_peso_kg)}
+                fieldsRequired={fieldsRequired}
               />
             }
             embalagem={

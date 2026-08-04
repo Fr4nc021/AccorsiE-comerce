@@ -5,6 +5,7 @@ import {
   PRODUCT_SUMMARY_SELECT,
   type ProductSummaryRow,
 } from "@/features/produtos/utils/mapProductSummaryRow";
+import { PRODUCT_STATUS_PUBLISHED } from "@/features/produtos/utils/productStatus";
 import type { ProductSummary } from "@/types/product";
 
 function intersectIds(a: string[], bSet: Set<string>): string[] {
@@ -14,7 +15,11 @@ function intersectIds(a: string[], bSet: Set<string>): string[] {
 async function fetchCompatTodosModelosIds(
   supabase: Awaited<ReturnType<typeof createClient>>,
 ): Promise<string[]> {
-  const { data, error } = await supabase.from("produtos").select("id").eq("compat_todos_modelos", true);
+  const { data, error } = await supabase
+    .from("produtos")
+    .select("id")
+    .eq("status", PRODUCT_STATUS_PUBLISHED)
+    .eq("compat_todos_modelos", true);
   if (error || !data?.length) return [];
   return data.map((r) => r.id as string).filter(Boolean);
 }
@@ -71,6 +76,7 @@ export async function getHomeProducts(opts?: {
     let destQuery = supabase
       .from("produtos")
       .select(PRODUCT_SUMMARY_SELECT)
+      .eq("status", PRODUCT_STATUS_PUBLISHED)
       .eq("em_destaque", true)
       .order("titulo")
       .limit(15);
@@ -83,6 +89,7 @@ export async function getHomeProducts(opts?: {
     let vitQuery = supabase
       .from("produtos")
       .select(PRODUCT_SUMMARY_SELECT)
+      .eq("status", PRODUCT_STATUS_PUBLISHED)
       .order("titulo")
       .limit(10);
     if (filterIds) vitQuery = vitQuery.in("id", filterIds);

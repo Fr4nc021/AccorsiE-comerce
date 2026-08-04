@@ -85,7 +85,12 @@ export function AdminDashboardProductSearch() {
       </div>
       {hasFilter && (
         <Link
-          href={pathname}
+          href={(() => {
+            const p = new URLSearchParams(sp.toString());
+            p.delete("q");
+            const qs = p.toString();
+            return qs ? `${pathname}?${qs}` : pathname;
+          })()}
           className="shrink-0 text-center text-sm font-medium text-admin-accent underline-offset-2 hover:underline"
         >
           Limpar busca

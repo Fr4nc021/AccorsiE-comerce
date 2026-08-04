@@ -1,11 +1,17 @@
+import Link from "next/link";
 import { Suspense } from "react";
 
 import { AdminDashboardProductSearch } from "@/features/admin/components/AdminDashboardProductSearch";
+import { AdminCatalogTabs } from "@/features/kits/components/AdminCatalogTabs";
 import { ProductDestaqueStarForm } from "@/features/produtos/components/ProductDestaqueStarForm";
 import { ProductRowActions } from "@/features/produtos/components/ProductRowActions";
-import { ProductCreateModal } from "@/features/produtos/components/ProductCreateModal";
-import { getProductFormOptions } from "@/features/produtos/services/getProductFormOptions";
+import { ProductCreateButton } from "@/features/produtos/components/ProductCreateButton";
+import { ProductStatusBadge } from "@/features/produtos/components/ProductStatusBadge";
 import { normalizeProductSearchInput } from "@/features/produtos/services/productSearchMatchingIds";
+import {
+  parseProductStatus,
+  type ProductStatus,
+} from "@/features/produtos/utils/productStatus";
 import { createClient } from "@/services/supabase/server";
 
 export const metadata = {
@@ -19,24 +25,32 @@ const money = new Intl.NumberFormat("pt-BR", {
 
 type ProdutoRow = {
   id: string;
-  titulo: string;
-  cod_produto: string;
-  valor: number;
+  titulo: string | null;
+  cod_produto: string | null;
+  valor: number | null;
   quantidade_estoque: number;
   em_destaque: boolean;
+  status: ProductStatus;
 };
 
 type KpiRow = { valor: number; quantidade_estoque: number };
 
 const PRODUTO_LIST_SELECT =
-  "id, titulo, cod_produto, valor, quantidade_estoque, em_destaque" as const;
+  "id, titulo, cod_produto, valor, quantidade_estoque, em_destaque, status" as const;
+
+type StatusFilter = "all" | ProductStatus;
+
+function parseStatusFilter(raw: string | undefined): StatusFilter {
+  if (raw === "draft" || raw === "published") return raw;
+  return "all";
+}
 
 function mergeProdutosById(a: ProdutoRow[], b: ProdutoRow[]): ProdutoRow[] {
   const map = new Map<string, ProdutoRow>();
   for (const row of a) map.set(row.id, row);
   for (const row of b) map.set(row.id, row);
   return [...map.values()].sort((x, y) =>
-    x.titulo.localeCompare(y.titulo, "pt-BR", { sensitivity: "base" })
+    (x.titulo ?? "").localeCompare(y.titulo ?? "", "pt-BR", { sensitivity: "base" })
   );
 }
 
@@ -52,51 +66,72 @@ function computeKpiStats(rows: KpiRow[]) {
   return { n, totalItens, valorEstoque, esgotados, ultimaUnidade };
 }
 
+function statusFilterHref(status: StatusFilter, q: string): string {
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  if (status !== "all") params.set("status", status);
+  const qs = params.toString();
+  return qs ? `/admin/produtos?${qs}` : "/admin/produtos";
+}
+
 export default async function AdminProdutosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string | string[] }>;
+  searchParams: Promise<{ q?: string | string[]; status?: string | string[]; erro?: string | string[] }>;
 }) {
-  const formOptions = await getProductFormOptions();
   let produtos: ProdutoRow[] = [];
   let loadError: string | null = null;
 
   const sp = await searchParams;
   const rawQ = typeof sp.q === "string" ? sp.q : Array.isArray(sp.q) ? sp.q[0] : "";
   const searchTerm = normalizeProductSearchInput(rawQ);
+  const rawStatus =
+    typeof sp.status === "string" ? sp.status : Array.isArray(sp.status) ? sp.status[0] : "";
+  const statusFilter = parseStatusFilter(rawStatus);
+  const rawErro = typeof sp.erro === "string" ? sp.erro : Array.isArray(sp.erro) ? sp.erro[0] : "";
 
   let kpiRows: KpiRow[] = [];
 
   try {
     const supabase = await createClient();
     const mapProdutoRows = (rows: unknown): ProdutoRow[] =>
-      (rows as ProdutoRow[]).map((row) => ({
-        ...row,
-        em_destaque: Boolean(row.em_destaque),
-      }));
+      (rows as Array<Omit<ProdutoRow, "status" | "em_destaque"> & { status?: unknown; em_destaque?: unknown }>).map(
+        (row) => ({
+          ...row,
+          em_destaque: Boolean(row.em_destaque),
+          status: parseProductStatus(row.status),
+        })
+      );
+
+    const applyStatus = <T extends { eq: (col: string, val: string) => T }>(query: T): T => {
+      if (statusFilter === "all") return query;
+      return query.eq("status", statusFilter);
+    };
 
     if (!searchTerm) {
-      const { data, error } = await supabase
-        .from("produtos")
-        .select(PRODUTO_LIST_SELECT)
-        .order("titulo");
+      let query = supabase.from("produtos").select(PRODUTO_LIST_SELECT).order("titulo");
+      query = applyStatus(query);
+      const { data, error } = await query;
 
       if (error) {
         loadError = error.message;
       } else if (data) {
         produtos = mapProdutoRows(data);
         kpiRows = produtos.map((p) => ({
-          valor: Number(p.valor),
+          valor: Number(p.valor ?? 0),
           quantidade_estoque: Number(p.quantidade_estoque),
         }));
       }
     } else {
       const pattern = `%${searchTerm}%`;
-      const [kpiRes, tituloRes, codRes] = await Promise.all([
-        supabase.from("produtos").select("valor, quantidade_estoque"),
-        supabase.from("produtos").select(PRODUTO_LIST_SELECT).ilike("titulo", pattern),
-        supabase.from("produtos").select(PRODUTO_LIST_SELECT).ilike("cod_produto", pattern),
-      ]);
+      let kpiQuery = supabase.from("produtos").select("valor, quantidade_estoque");
+      kpiQuery = applyStatus(kpiQuery);
+      let tituloQuery = supabase.from("produtos").select(PRODUTO_LIST_SELECT).ilike("titulo", pattern);
+      tituloQuery = applyStatus(tituloQuery);
+      let codQuery = supabase.from("produtos").select(PRODUTO_LIST_SELECT).ilike("cod_produto", pattern);
+      codQuery = applyStatus(codQuery);
+
+      const [kpiRes, tituloRes, codRes] = await Promise.all([kpiQuery, tituloQuery, codQuery]);
 
       const err =
         kpiRes.error?.message ?? tituloRes.error?.message ?? codRes.error?.message ?? null;
@@ -115,17 +150,24 @@ export default async function AdminProdutosPage({
   }
 
   const { n, totalItens, valorEstoque, esgotados, ultimaUnidade } = computeKpiStats(kpiRows);
-  const disableCreateButton = Boolean(formOptions.configError || formOptions.loadError);
+
+  const filterChips: { key: StatusFilter; label: string }[] = [
+    { key: "all", label: "Todos" },
+    { key: "draft", label: "Em cadastro" },
+    { key: "published", label: "Publicados" },
+  ];
 
   return (
     <div className="space-y-6">
-      {formOptions.configError && (
+      <AdminCatalogTabs active="produtos" />
+
+      {rawErro && (
         <div
-          className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 shadow-sm"
+          className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-950 shadow-sm"
           role="alert"
         >
-          <p className="font-semibold">Configuração</p>
-          <p className="mt-1">{formOptions.configError}</p>
+          <p className="font-semibold">Não foi possível criar o produto</p>
+          <p className="mt-1">{rawErro}</p>
         </div>
       )}
 
@@ -165,6 +207,24 @@ export default async function AdminProdutosPage({
                 ? `Filtrando por nome ou código · ${produtos.length} resultado${produtos.length === 1 ? "" : "s"}`
                 : "Pesquise, edite e gerencie o catálogo"}
             </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {filterChips.map((chip) => {
+                const active = statusFilter === chip.key;
+                return (
+                  <Link
+                    key={chip.key}
+                    href={statusFilterHref(chip.key, searchTerm ?? "")}
+                    className={
+                      active
+                        ? "rounded-full bg-admin-accent px-3 py-1 text-xs font-semibold text-white"
+                        : "rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-200"
+                    }
+                  >
+                    {chip.label}
+                  </Link>
+                );
+              })}
+            </div>
           </div>
           <div className="flex w-full flex-col gap-3 lg:w-auto lg:flex-row lg:items-center">
             <Suspense
@@ -177,26 +237,9 @@ export default async function AdminProdutosPage({
             >
               <AdminDashboardProductSearch />
             </Suspense>
-            <ProductCreateModal
-              modelos={formOptions.modelos}
-              categorias={formOptions.categorias}
-              embalagens={formOptions.embalagens}
-              produtosRelacionadosOpcoes={formOptions.produtosRelacionadosOpcoes}
-              disabled={disableCreateButton}
-            />
+            <ProductCreateButton />
           </div>
         </div>
-
-        {formOptions.categoriasLoadError && (
-          <div className="border-b border-amber-200 bg-amber-50 px-6 py-3 text-sm text-amber-950">
-            Categorias não carregadas ({formOptions.categoriasLoadError}).
-          </div>
-        )}
-        {formOptions.embalagensLoadError && (
-          <div className="border-b border-amber-200 bg-amber-50 px-6 py-3 text-sm text-amber-950">
-            Embalagens não carregadas ({formOptions.embalagensLoadError}).
-          </div>
-        )}
 
         {ultimaUnidade > 0 && (
           <div className="border-b border-amber-200 bg-amber-50 px-6 py-3 text-sm text-amber-950" role="status">
@@ -216,7 +259,9 @@ export default async function AdminProdutosPage({
 
         {produtos.length === 0 ? (
           <p className="px-6 py-10 text-center text-sm text-gray-500">
-            {searchTerm ? "Nenhum produto encontrado para essa busca." : "Nenhum produto cadastrado ainda."}
+            {searchTerm || statusFilter !== "all"
+              ? "Nenhum produto encontrado para esse filtro."
+              : "Nenhum produto cadastrado ainda."}
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -238,32 +283,21 @@ export default async function AdminProdutosPage({
               <tbody className="divide-y divide-gray-100">
                 {produtos.map((p) => {
                   const q = Number(p.quantidade_estoque);
-                  const inStock = q > 0;
-                  const oneLeft = q === 1;
                   return (
                     <tr key={p.id} className="text-gray-900 transition hover:bg-gray-50/80">
                       <td className="px-2 py-4">
                         <ProductDestaqueStarForm productId={p.id} emDestaque={p.em_destaque} />
                       </td>
-                      <td className="px-6 py-4 font-medium">{p.titulo}</td>
-                      <td className="px-6 py-4 font-mono text-xs text-gray-600">{p.cod_produto}</td>
+                      <td className="px-6 py-4 font-medium">{p.titulo?.trim() || "Sem título"}</td>
+                      <td className="px-6 py-4 font-mono text-xs text-gray-600">
+                        {p.cod_produto?.trim() || "—"}
+                      </td>
                       <td className="px-6 py-4 text-right tabular-nums font-medium">
-                        {money.format(Number(p.valor))}
+                        {p.valor != null ? money.format(Number(p.valor)) : "—"}
                       </td>
                       <td className="px-6 py-4 text-right tabular-nums text-gray-700">{q}</td>
                       <td className="px-6 py-4 text-center">
-                        <span
-                          className={[
-                            "inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium",
-                            !inStock
-                              ? "bg-gray-100 text-gray-600"
-                              : oneLeft
-                                ? "bg-amber-100 text-amber-900"
-                                : "bg-[#1d63ed]/12 text-[#1d63ed]",
-                          ].join(" ")}
-                        >
-                          {!inStock ? "Esgotado" : oneLeft ? "Última unidade" : "Em estoque"}
-                        </span>
+                        <ProductStatusBadge status={p.status} />
                       </td>
                       <td className="px-6 py-4 text-right">
                         <ProductRowActions productId={p.id} />

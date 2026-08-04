@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { PRODUCT_STATUS_PUBLISHED } from "@/features/produtos/utils/productStatus";
 
 /** Remove curingas perigosos do ILIKE e limita o tamanho. */
 export function normalizeProductSearchInput(raw: string): string | null {
@@ -22,8 +23,16 @@ export async function fetchProductIdsMatchingSearchTerm(
   const ids = new Set<string>();
 
   const [byTitulo, byCod] = await Promise.all([
-    supabase.from("produtos").select("id").ilike("titulo", pattern),
-    supabase.from("produtos").select("id").ilike("cod_produto", pattern),
+    supabase
+      .from("produtos")
+      .select("id")
+      .eq("status", PRODUCT_STATUS_PUBLISHED)
+      .ilike("titulo", pattern),
+    supabase
+      .from("produtos")
+      .select("id")
+      .eq("status", PRODUCT_STATUS_PUBLISHED)
+      .ilike("cod_produto", pattern),
   ]);
 
   for (const row of byTitulo.data ?? []) {
@@ -60,6 +69,7 @@ export async function fetchProductIdsMatchingSearchTerm(
     const { data: todosModelosRows } = await supabase
       .from("produtos")
       .select("id")
+      .eq("status", PRODUCT_STATUS_PUBLISHED)
       .eq("compat_todos_modelos", true);
     for (const row of todosModelosRows ?? []) {
       if (row.id) ids.add(row.id as string);

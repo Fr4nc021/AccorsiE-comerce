@@ -9,6 +9,7 @@ import {
   type ProdutoFreteRow,
   rowToQuoteLine,
 } from "@/services/melhorEnvio/freteQuoteLinesFromRows";
+import { PRODUCT_STATUS_PUBLISHED } from "@/features/produtos/utils/productStatus";
 import { createClient } from "@/services/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -105,6 +106,7 @@ export async function POST(request: Request) {
     .select(
       "id, valor, quantidade_estoque, prod_comprimento_cm, prod_largura_cm, prod_altura_cm, prod_peso_kg, embalagem_id, somente_retirada_loja",
     )
+    .eq("status", PRODUCT_STATUS_PUBLISHED)
     .in("id", ids);
 
   if (prodErr) {

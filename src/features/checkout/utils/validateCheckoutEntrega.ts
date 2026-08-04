@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { PRODUCT_STATUS_PUBLISHED } from "@/features/produtos/utils/productStatus";
 
 export type CheckoutEntregaValidation = {
   hasSomenteRetirada: boolean;
@@ -32,6 +33,7 @@ export async function fetchCheckoutSomenteRetiradaFlags(
   const { data, error } = await supabase
     .from("produtos")
     .select("id, somente_retirada_loja")
+    .eq("status", PRODUCT_STATUS_PUBLISHED)
     .in("id", ids);
 
   if (error) {

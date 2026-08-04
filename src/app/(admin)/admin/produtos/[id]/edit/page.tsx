@@ -15,6 +15,7 @@ import {
   mapModelosToProductOptions,
   type ModeloDbRow,
 } from "@/features/produtos/services/mapModelosToProductOptions";
+import { parseProductStatus } from "@/features/produtos/utils/productStatus";
 
 type PageProps = { params: Promise<{ id: string }> };
 
@@ -65,7 +66,7 @@ export default async function EditProdutoPage({ params }: PageProps) {
       supabase
         .from("produtos")
         .select(
-          "id, titulo, cod_produto, descricao, valor, foto, quantidade_estoque, em_destaque, somente_retirada_loja, compat_todos_modelos, prod_comprimento_cm, prod_largura_cm, prod_altura_cm, prod_peso_kg, embalagem_id, desconto_pix_percent, desconto_cartao_percent"
+          "id, titulo, cod_produto, descricao, valor, foto, quantidade_estoque, status, em_destaque, somente_retirada_loja, compat_todos_modelos, prod_comprimento_cm, prod_largura_cm, prod_altura_cm, prod_peso_kg, embalagem_id, desconto_pix_percent, desconto_cartao_percent"
         )
         .eq("id", id)
         .maybeSingle(),
@@ -123,17 +124,18 @@ export default async function EditProdutoPage({ params }: PageProps) {
 
       productValues = {
         id: p.id,
-        titulo: p.titulo,
-        cod_produto: p.cod_produto,
+        titulo: p.titulo ?? "",
+        cod_produto: p.cod_produto ?? "",
         descricao: p.descricao ?? "",
-        valor: Number(p.valor),
+        valor: p.valor != null ? Number(p.valor) : null,
         foto: p.foto ?? "",
         fotos: (fotosRows ?? []).map((row) => ({
           foto: row.foto,
           is_principal: row.is_principal === true,
           ordem: Number.isFinite(row.ordem) ? Number(row.ordem) : 0,
         })),
-        quantidade_estoque: p.quantidade_estoque,
+        quantidade_estoque: Number(p.quantidade_estoque ?? 0),
+        status: parseProductStatus((p as { status?: unknown }).status),
         em_destaque: Boolean(p.em_destaque),
         somente_retirada_loja: Boolean(
           (p as { somente_retirada_loja?: boolean | null }).somente_retirada_loja,
