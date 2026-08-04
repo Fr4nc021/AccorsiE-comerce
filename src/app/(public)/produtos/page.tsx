@@ -7,6 +7,8 @@ import { getStoreMarcas } from "@/features/marcas/services/getStoreMarcas";
 import { ProductCatalogFilters } from "@/features/produtos/components/ProductCatalogFilters";
 import { ProductsGrid } from "@/features/produtos/components/ProductsGrid";
 import { getCatalogProducts, getCatalogSliderMax } from "@/features/produtos/services/getCatalogProducts";
+import { searchPublishedKits } from "@/features/kits/services/getHomeKits";
+import { KitsSection } from "@/features/kits/components/KitsSection";
 import { getVehicleFilterCatalogData } from "@/features/compatibilidade/services/getVehicleFilterCatalogData";
 import {
   catalogFilterSummary,
@@ -28,11 +30,12 @@ export default async function ProdutosPage({
   const sliderMax = await getCatalogSliderMax();
   const filters = normalizeCatalogFilters(parseCatalogSearchParams(sp), sliderMax);
 
-  const [categorias, marcas, produtos, vehicleFilterData] = await Promise.all([
+  const [categorias, marcas, produtos, vehicleFilterData, kitsBusca] = await Promise.all([
     getHomeCategories(),
     getStoreMarcas(),
     getCatalogProducts(filters, sliderMax),
     getVehicleFilterCatalogData(),
+    filters.q?.trim() ? searchPublishedKits(filters.q.trim()) : Promise.resolve([]),
   ]);
 
   const summary = catalogFilterSummary(filters, categorias, marcas, sliderMax);
@@ -99,6 +102,10 @@ export default async function ProdutosPage({
                   <div className="mt-2 h-1 w-14 rounded-[1px] bg-store-navy sm:w-16" aria-hidden />
                 </div>
               </header>
+
+              {kitsBusca.length > 0 ? (
+                <KitsSection kits={kitsBusca} title="Kits encontrados" embedded />
+              ) : null}
 
               <ProductsGrid variant="catalog" produtos={produtos} emptyMessage={emptyMessage} />
             </div>

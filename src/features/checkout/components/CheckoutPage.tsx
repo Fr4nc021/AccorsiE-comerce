@@ -41,7 +41,7 @@ export function CheckoutPage({
   lojaRetirada = null,
 }: CheckoutPageProps) {
   const baseId = useId();
-  const { lines, itemCount, isReady } = useCart();
+  const { lines, itemCount, isReady, kitClaims, kitDesconto } = useCart();
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamentoCheckout>("cartao");
   const hasItems = lines.length > 0;
   const subtotal = useMemo(
@@ -57,6 +57,7 @@ export function CheckoutPage({
       }, 0),
     [lines, formaPagamento],
   );
+  const baseAposKit = Math.max(0, subtotal - kitDesconto);
 
   const [destinatarioNome, setDestinatarioNome] = useState(() => defaultDestinatarioNome.trim());
   const [telefone, setTelefone] = useState(() => initialEndereco.telefone);
@@ -101,12 +102,12 @@ export function CheckoutPage({
   const [cupomDesconto, setCupomDesconto] = useState<number | null>(null);
   const [cupomMensagem, setCupomMensagem] = useState<string | null>(null);
   const [cupomBusy, setCupomBusy] = useState(false);
-  const total = Math.max(0, subtotal + shipping - (cupomDesconto ?? 0));
+  const total = Math.max(0, baseAposKit + shipping - (cupomDesconto ?? 0));
 
   useEffect(() => {
     setCupomDesconto(null);
     setCupomMensagem(null);
-  }, [subtotal, shipping, itemCount, modoEntrega, frete.selectedId]);
+  }, [subtotal, kitDesconto, shipping, itemCount, modoEntrega, frete.selectedId]);
 
   useEffect(() => {
     const cepDigits = cep.replace(/\D/g, "").slice(0, 8);
@@ -210,13 +211,14 @@ export function CheckoutPage({
     const payload: CheckoutPayload = {
       ...payloadBase,
       ...(codigoCupom ? { cupom_codigo: codigoCupom } : {}),
+      ...(kitClaims.length > 0 ? { kit_ids: kitClaims.map((c) => c.kitId) } : {}),
     };
 
     setCheckoutBusy(true);
     void (async () => {
       try {
         if (codigoCupom) {
-          const prev = await previewCupomDesconto(codigoCupom, subtotal, shipping);
+          const prev = await previewCupomDesconto(codigoCupom, baseAposKit, shipping);
           if (!prev.ok) {
             setFormError(prev.message);
             return;
@@ -248,7 +250,7 @@ export function CheckoutPage({
     }
     setCupomBusy(true);
     try {
-      const r = await previewCupomDesconto(c, subtotal, shipping);
+      const r = await previewCupomDesconto(c, baseAposKit, shipping);
       if (r.ok) {
         setCupomDesconto(r.desconto);
         setCupomMensagem(`Desconto de ${money.format(r.desconto)} incorporado ao total.`);
@@ -707,6 +709,14 @@ export function CheckoutPage({
                   <dt className="text-store-navy">Subtotal</dt>
                   <dd className="font-semibold tabular-nums text-black">{money.format(subtotal)}</dd>
                 </div>
+                {kitDesconto > 0 ? (
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-store-navy">Desconto kit</dt>
+                    <dd className="font-semibold tabular-nums text-emerald-800">
+                      − {money.format(kitDesconto)}
+                    </dd>
+                  </div>
+                ) : null}
                 <div className="flex justify-between gap-4">
                   <dt className="text-store-navy">Frete</dt>
                   <dd className="font-semibold tabular-nums text-black">

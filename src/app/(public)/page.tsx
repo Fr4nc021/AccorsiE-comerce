@@ -1,14 +1,17 @@
 import { CategoriesSection } from "@/features/categorias/components/CategoriesSection";
 import { DestaquesSection } from "@/features/produtos/components/DestaquesSection";
 import { ProductsSection } from "@/features/produtos/components/ProductsSection";
+import { KitsSection } from "@/features/kits/components/KitsSection";
 import { VehicleFilter } from "@/features/compatibilidade/components/VehicleFilter";
 import { getVehicleFilterCatalogData } from "@/features/compatibilidade/services/getVehicleFilterCatalogData";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { getHomeCategories } from "@/features/categorias/services/getHomeCategories";
 import { getHomeProducts } from "@/features/produtos/services/getHomeProducts";
+import { getHomeKits, searchPublishedKits } from "@/features/kits/services/getHomeKits";
 import { parseHomeVehicleParams, parseProductSearchQ } from "@/features/produtos/utils/catalogSearchParams";
 import { storeShellContent, storeShellInset } from "@/config/storeShell";
 import type { CategoryListItem } from "@/types/category";
+import type { KitSummary } from "@/types/kit";
 import type { ProductSummary } from "@/types/product";
 
 /** Catálogo marcas/modelos (incl. camionete) deve refletir cadastro no Supabase sem cache de página. */
@@ -22,19 +25,22 @@ export default async function Home({
   let categorias: CategoryListItem[] = [];
   let produtosDestaque: ProductSummary[] = [];
   let produtosVitrine: ProductSummary[] = [];
+  let kits: KitSummary[] = [];
 
   const sp = await searchParams;
   const searchQ = parseProductSearchQ(sp);
   const { modeloId, anoVeiculo } = parseHomeVehicleParams(sp);
 
-  const [cats, prods, vehicleFilterData] = await Promise.all([
+  const [cats, prods, vehicleFilterData, kitsData] = await Promise.all([
     getHomeCategories(),
     getHomeProducts({ q: searchQ, modeloId, anoVeiculo }),
     getVehicleFilterCatalogData(),
+    searchQ ? searchPublishedKits(searchQ) : getHomeKits(),
   ]);
   categorias = cats;
   produtosDestaque = prods.destaque;
   produtosVitrine = prods.vitrine;
+  kits = kitsData;
 
   const vehicleFiltering = Boolean(modeloId);
   /** Com busca ou veículo, produtos ficam logo abaixo da área de pesquisa/filtros (categorias depois). */
@@ -56,10 +62,21 @@ export default async function Home({
           ? "Nenhum produto compatível com o veículo escolhido. Tente outro modelo ou ano."
           : undefined;
 
+  const kitsBlock =
+    kits.length > 0 || searchQ ? (
+      <KitsSection
+        kits={kits}
+        title={searchQ ? "Kits encontrados" : "Kits"}
+        emptyMessage={searchQ ? "Nenhum kit corresponde à busca." : undefined}
+      />
+    ) : null;
+
   const catalogMain = (
     <main className="flex min-h-0 flex-1 flex-col">
+      {searchQ ? kitsBlock : null}
       <DestaquesSection produtos={produtosDestaque} emptyMessage={emptyDestaque} />
       <ProductsSection produtos={produtosVitrine} emptyMessage={emptyVitrine} />
+      {!searchQ ? kitsBlock : null}
     </main>
   );
 

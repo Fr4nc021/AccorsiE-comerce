@@ -9,6 +9,8 @@ import { ProductsGrid } from "@/features/produtos/components/ProductsGrid";
 import { ProductDescriptionDisplay } from "@/features/produtos/components/ProductDescriptionDisplay";
 import { ProductFreteCepConsult } from "@/features/produtos/components/ProductFreteCepConsult";
 import { getProductDetailPageData } from "@/features/produtos/services/getProductDetailPageData";
+import { getKitsForProduct } from "@/features/kits/services/getKitsForProduct";
+import { KitsSection } from "@/features/kits/components/KitsSection";
 import { unitPriceAfterPaymentDiscount } from "@/features/produtos/utils/paymentDiscount";
 
 type PageProps = { params: Promise<{ id: string }> };
@@ -26,7 +28,10 @@ export async function generateMetadata({ params }: PageProps) {
 
 export default async function ProdutoDetalhePage({ params }: PageProps) {
   const { id } = await params;
-  const { produto, relacionados } = await getProductDetailPageData(id);
+  const [{ produto, relacionados }, kitsDoProduto] = await Promise.all([
+    getProductDetailPageData(id),
+    getKitsForProduct(id),
+  ]);
 
   if (!produto) notFound();
 
@@ -120,6 +125,14 @@ export default async function ProdutoDetalhePage({ params }: PageProps) {
               </div>
             </div>
           </section>
+
+          {kitsDoProduto.length > 0 ? (
+            <KitsSection
+              kits={kitsDoProduto}
+              title="Este produto faz parte dos seguintes Kits"
+              embedded
+            />
+          ) : null}
 
           <section aria-labelledby="produtos-relacionados-heading" className="space-y-5">
             <header>
