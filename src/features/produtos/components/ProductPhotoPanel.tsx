@@ -67,9 +67,6 @@ function normalizeImageFile(file: File): { file: File } | { error: string } {
   return { error: "Use JPEG, PNG, WEBP ou GIF." };
 }
 
-const fieldClass =
-  "rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-admin-accent focus:ring-2 focus:ring-[#1d63ed]/20";
-
 function productImagesBucket() {
   return process.env.NEXT_PUBLIC_SUPABASE_PRODUCT_IMAGES_BUCKET ?? "product-images";
 }
@@ -229,7 +226,6 @@ export function ProductPhotoPanel({
   const [removingFoto, setRemovingFoto] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
-  const [manualUrl, setManualUrl] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const dragCounter = useRef(0);
 
@@ -400,13 +396,6 @@ export function ProductPhotoPanel({
     });
   }, []);
 
-  const addManualUrl = useCallback(() => {
-    const ref = manualUrl.trim();
-    if (!ref) return;
-    addUrlsToGallery([resolvePublicImageUrl(ref)]);
-    setManualUrl("");
-  }, [addUrlsToGallery, manualUrl]);
-
   const onDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -473,9 +462,14 @@ export function ProductPhotoPanel({
                   <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
                     {item.is_principal ? "Foto principal" : `Foto complementar #${index + 1}`}
                   </p>
-                  <p className="mt-0.5 break-all text-sm text-gray-800" title={item.foto}>
-                    {item.foto}
-                  </p>
+                  <a
+                    href={resolvedListSrc}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-0.5 inline-block text-sm font-medium text-admin-accent underline-offset-4 hover:underline"
+                  >
+                    link
+                  </a>
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-2 sm:flex-col sm:items-stretch">
                   <button
@@ -566,29 +560,6 @@ export function ProductPhotoPanel({
         </p>
       </div>
 
-      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-end">
-        <div className="flex-1">
-          <label htmlFor="foto_manual" className="text-sm font-medium text-gray-700">
-            URL ou caminho manual
-          </label>
-          <input
-            id="foto_manual"
-            value={manualUrl}
-            onChange={(e) => setManualUrl(e.target.value)}
-            className={`${fieldClass} mt-1 w-full`}
-            placeholder="Ex.: https://… ou product-images/produtos/…"
-            autoComplete="off"
-          />
-        </div>
-        <button
-          type="button"
-          onClick={addManualUrl}
-          className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
-        >
-          Adicionar URL
-        </button>
-      </div>
-
       {error && (
         <p className="mt-2 text-sm text-red-600" role="alert">
           {error}
@@ -609,8 +580,7 @@ export function ProductPhotoPanel({
           <path d="M21 15l-5-5-4 4-2-2-5 5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
         <p>
-          Padrão: 1200×1200 px (redimensiona automaticamente PNG/JPEG/WEBP). GIF precisa já estar em 1200×1200. Envio
-          exige login no painel; máximo 5 MB por arquivo. iPhone: use JPEG (não HEIC).
+          Padrão: 1200×1200 px use PNG OU JPEG máximo 5 MB por arquivo.
         </p>
       </div>
     </div>
