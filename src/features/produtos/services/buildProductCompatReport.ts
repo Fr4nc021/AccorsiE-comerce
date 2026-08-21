@@ -87,32 +87,40 @@ export async function buildProductCompatReport(
   supabase: SupabaseClient
 ): Promise<ProductCompatReportResult> {
   const [produtosRes, compatRes, modelosRes, marcasRes] = await Promise.all([
-    fetchAllPages<ProdutoRow>((from, to) =>
-      supabase
+    fetchAllPages<ProdutoRow>(async (from, to) => {
+      const { data, error } = await supabase
         .from("produtos")
         .select("id, titulo, cod_produto, status, compat_todos_modelos")
         .order("id")
-        .range(from, to)
-    ),
-    fetchAllPages<CompatRow>((from, to) =>
-      supabase
+        .range(from, to);
+      return { data: data as ProdutoRow[] | null, error };
+    }),
+    fetchAllPages<CompatRow>(async (from, to) => {
+      const { data, error } = await supabase
         .from("produto_compatibilidades")
         .select("produto_id, modelo_id, ano_inicio, ano_fim")
         .order("produto_id")
         .order("modelo_id")
         .order("ano_inicio")
-        .range(from, to)
-    ),
-    fetchAllPages<ModeloRow>((from, to) =>
-      supabase
+        .range(from, to);
+      return { data: data as CompatRow[] | null, error };
+    }),
+    fetchAllPages<ModeloRow>(async (from, to) => {
+      const { data, error } = await supabase
         .from("modelos")
         .select("id, nome, slug, tipo_veiculo, marca_id")
         .order("id")
-        .range(from, to)
-    ),
-    fetchAllPages<MarcaRow>((from, to) =>
-      supabase.from("marcas").select("id, nome, slug").order("id").range(from, to)
-    ),
+        .range(from, to);
+      return { data: data as ModeloRow[] | null, error };
+    }),
+    fetchAllPages<MarcaRow>(async (from, to) => {
+      const { data, error } = await supabase
+        .from("marcas")
+        .select("id, nome, slug")
+        .order("id")
+        .range(from, to);
+      return { data: data as MarcaRow[] | null, error };
+    }),
   ]);
 
   const firstError =
