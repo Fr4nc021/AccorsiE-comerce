@@ -5,28 +5,28 @@ import { AdminDashboardProductSearch } from "@/features/admin/components/AdminDa
 import { AdminCatalogTabs } from "@/features/kits/components/AdminCatalogTabs";
 import { ProductDestaqueStarForm } from "@/features/produtos/components/ProductDestaqueStarForm";
 import { ProductRowActions } from "@/features/produtos/components/ProductRowActions";
+import { ProductCompatReportButton } from "@/features/produtos/components/ProductCompatReportButton";
 import { ProductCreateButton } from "@/features/produtos/components/ProductCreateButton";
 import { ProductStatusBadge } from "@/features/produtos/components/ProductStatusBadge";
 import { normalizeProductSearchInput } from "@/features/produtos/services/productSearchMatchingIds";
+import { resolveProductImagePublicUrl } from "@/features/produtos/utils/resolveProductImagePublicUrl";
 import {
   parseProductStatus,
   type ProductStatus,
 } from "@/features/produtos/utils/productStatus";
 import { createClient } from "@/services/supabase/server";
 
+const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+
 export const metadata = {
   title: "Produtos | Admin",
 };
-
-const money = new Intl.NumberFormat("pt-BR", {
-  style: "currency",
-  currency: "BRL",
-});
 
 type ProdutoRow = {
   id: string;
   titulo: string | null;
   cod_produto: string | null;
+  foto: string | null;
   valor: number | null;
   quantidade_estoque: number;
   em_destaque: boolean;
@@ -36,7 +36,7 @@ type ProdutoRow = {
 type KpiRow = { valor: number; quantidade_estoque: number };
 
 const PRODUTO_LIST_SELECT =
-  "id, titulo, cod_produto, valor, quantidade_estoque, em_destaque, status" as const;
+  "id, titulo, cod_produto, foto, valor, quantidade_estoque, em_destaque, status" as const;
 
 type StatusFilter = "all" | ProductStatus;
 
@@ -188,9 +188,7 @@ export default async function AdminProdutosPage({
         </article>
         <article className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
           <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Itens em estoque</p>
-          <p className="mt-2 text-2xl font-bold tracking-tight text-gray-900">
-            {totalItens.toLocaleString("pt-BR")}
-          </p>
+          <p className="mt-2 text-2xl font-bold tracking-tight text-gray-900">{totalItens}</p>
         </article>
         <article className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
           <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Valor em estoque</p>
@@ -237,7 +235,10 @@ export default async function AdminProdutosPage({
             >
               <AdminDashboardProductSearch />
             </Suspense>
-            <ProductCreateButton />
+            <div className="flex flex-wrap items-stretch gap-2 lg:items-center">
+              <ProductCompatReportButton />
+              <ProductCreateButton />
+            </div>
           </div>
         </div>
 
@@ -265,12 +266,15 @@ export default async function AdminProdutosPage({
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-left text-sm">
+            <table className="w-full min-w-[760px] text-left text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/80 text-xs font-semibold uppercase tracking-wide text-gray-500">
                   <th className="w-14 px-2 py-3 text-center text-amber-500" scope="col">
                     <span className="sr-only">Destaque na home</span>
                     <span aria-hidden>★</span>
+                  </th>
+                  <th className="w-16 px-3 py-3" scope="col">
+                    <span className="sr-only">Foto</span>
                   </th>
                   <th className="px-6 py-3">Produto</th>
                   <th className="px-6 py-3">Código</th>
@@ -282,20 +286,47 @@ export default async function AdminProdutosPage({
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {produtos.map((p) => {
-                  const q = Number(p.quantidade_estoque);
-                  return (
+                    const fotoSrc = resolveProductImagePublicUrl(p.foto);
+                    const estoque = Number(p.quantidade_estoque);
+                    return (
                     <tr key={p.id} className="text-gray-900 transition hover:bg-gray-50/80">
                       <td className="px-2 py-4">
                         <ProductDestaqueStarForm productId={p.id} emDestaque={p.em_destaque} />
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-md border border-gray-200 bg-white">
+                          {fotoSrc ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={fotoSrc}
+                              alt=""
+                              className="h-full w-full object-contain"
+                            />
+                          ) : (
+                            <span className="text-[10px] text-gray-400">Sem foto</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 font-medium">{p.titulo?.trim() || "Sem título"}</td>
                       <td className="px-6 py-4 font-mono text-xs text-gray-600">
                         {p.cod_produto?.trim() || "—"}
                       </td>
-                      <td className="px-6 py-4 text-right tabular-nums font-medium">
-                        {p.valor != null ? money.format(Number(p.valor)) : "—"}
+                      <td className="px-6 py-4 text-right tabular-nums text-gray-800">
+                        {p.valor != null && Number.isFinite(Number(p.valor))
+                          ? money.format(Number(p.valor))
+                          : "—"}
                       </td>
-                      <td className="px-6 py-4 text-right tabular-nums text-gray-700">{q}</td>
+                      <td
+                        className={`px-6 py-4 text-right tabular-nums ${
+                          estoque <= 0
+                            ? "font-semibold text-red-700"
+                            : estoque === 1
+                              ? "font-semibold text-amber-800"
+                              : "text-gray-800"
+                        }`}
+                      >
+                        {estoque}
+                      </td>
                       <td className="px-6 py-4 text-center">
                         <ProductStatusBadge status={p.status} />
                       </td>
@@ -303,7 +334,7 @@ export default async function AdminProdutosPage({
                         <ProductRowActions productId={p.id} />
                       </td>
                     </tr>
-                  );
+                    );
                 })}
               </tbody>
             </table>

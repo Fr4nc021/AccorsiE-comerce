@@ -1,8 +1,26 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import Link from "next/link";
+import { useCallback, useMemo, useRef, useState, useTransition } from "react";
+
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { TIPO_VEICULO_MODELO_LABELS } from "@/features/compatibilidade/constants/tipoVeiculoModelo";
+import {
+  importFipeBrand,
+  type ImportFipeBrandResult,
+} from "@/features/fipe-consulta/services/importFipeBrand";
+import { classifyTipoVeiculoModelo } from "@/services/fipe/classifyTipoVeiculoModelo";
+import { extractYearsFromFipePayload } from "@/services/fipe/fipeSlugs";
+import type { FipeVehicleType } from "@/services/fipe/parallelumClient";
 
 type Item = { code: string; name: string };
+
+type ModelRow = Item & {
+  anos: number[];
+  anosStatus: "pending" | "ready" | "error";
+};
+
+const YEARS_CONCURRENCY = 3;
 
 function normalizeItem(raw: unknown): Item | null {
   if (!raw || typeof raw !== "object") return null;
@@ -60,12 +78,54 @@ async function readApiJson(path: string): Promise<{ ok: true; data: unknown } | 
   return { ok: true, data: body };
 }
 
+function formatYearRanges(anos: number[]): string {
+  if (anos.length === 0) return "sem anos na FIPE";
+  const sorted = [...anos].sort((a, b) => a - b);
+  const ranges: string[] = [];
+  let start = sorted[0];
+  let prev = sorted[0];
+  for (let i = 1; i < sorted.length; i++) {
+    const y = sorted[i];
+    if (y === prev + 1) {
+      prev = y;
+      continue;
+    }
+    ranges.push(start === prev ? String(start) : `${start}–${prev}`);
+    start = prev = y;
+  }
+  ranges.push(start === prev ? String(start) : `${start}–${prev}`);
+  return ranges.join(", ");
+}
+
+async function mapPool<T>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<void>,
+  shouldAbort: () => boolean,
+): Promise<void> {
+  let next = 0;
+  async function worker() {
+    while (true) {
+      if (shouldAbort()) return;
+      const idx = next;
+      next += 1;
+      if (idx >= items.length) return;
+      await fn(items[idx]);
+    }
+  }
+  const n = Math.min(Math.max(1, concurrency), items.length);
+  await Promise.all(Array.from({ length: n }, () => worker()));
+}
+
 export function ConsultaFipeClient() {
+  const [vehicleType, setVehicleType] = useState<FipeVehicleType>("cars");
   const [brands, setBrands] = useState<Item[]>([]);
-  const [models, setModels] = useState<Item[]>([]);
+  const [models, setModels] = useState<ModelRow[]>([]);
   const [brandCode, setBrandCode] = useState("");
   const [loadingBrands, setLoadingBrands] = useState(false);
   const [loadingModels, setLoadingModels] = useState(false);
+  const [loadingYears, setLoadingYears] = useState(false);
+  const [yearsProgress, setYearsProgress] = useState({ done: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
   const [brandsLoadedAt, setBrandsLoadedAt] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -75,20 +135,54 @@ export function ConsultaFipeClient() {
   const [anoAte, setAnoAte] = useState(() => new Date().getFullYear());
   const [onlyModeloAnos, setOnlyModeloAnos] = useState(false);
   const [marcaSlugSql, setMarcaSlugSql] = useState("");
+  const [confirmImport, setConfirmImport] = useState(false);
+  const [importResult, setImportResult] = useState<ImportFipeBrandResult | null>(null);
+  const [importing, startImport] = useTransition();
+  const loadGen = useRef(0);
 
   const sortedBrands = useMemo(
     () => [...brands].sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
     [brands],
   );
 
-  const loadBrands = useCallback(async () => {
+  const selectedBrand = useMemo(
+    () => sortedBrands.find((b) => b.code === brandCode) ?? null,
+    [sortedBrands, brandCode],
+  );
+
+  const sortedModels = useMemo(
+    () => [...models].sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
+    [models],
+  );
+
+  const yearsReady = models.length > 0 && models.every((m) => m.anosStatus !== "pending");
+  const canImport = Boolean(selectedBrand) && yearsReady && !loadingModels && !loadingYears && !importing;
+
+  const resetCatalog = useCallback(() => {
+    loadGen.current += 1;
+    setBrands([]);
+    setModels([]);
+    setBrandCode("");
+    setBrandsLoadedAt(null);
     setError(null);
+    setExportHint(null);
+    setImportResult(null);
+    setLoadingYears(false);
+    setYearsProgress({ done: 0, total: 0 });
+  }, []);
+
+  const loadBrands = useCallback(async () => {
+    loadGen.current += 1;
+    setError(null);
+    setImportResult(null);
     setLoadingBrands(true);
     setBrands([]);
     setModels([]);
     setBrandCode("");
+    setLoadingYears(false);
+    setYearsProgress({ done: 0, total: 0 });
     try {
-      const result = await readApiJson("/api/fipe/cars/brands");
+      const result = await readApiJson(`/api/fipe/${vehicleType}/brands`);
       if (!result.ok) {
         setError(result.message);
         return;
@@ -103,7 +197,7 @@ export function ConsultaFipeClient() {
     } finally {
       setLoadingBrands(false);
     }
-  }, []);
+  }, [vehicleType]);
 
   const downloadMigrationBundle = useCallback(async () => {
     if (!brandCode) return;
@@ -172,38 +266,152 @@ export function ConsultaFipeClient() {
     }
   }, [brandCode, anosMode, anoDesde, anoAte, onlyModeloAnos, marcaSlugSql]);
 
-  const loadModels = useCallback(async (code: string) => {
-    setBrandCode(code);
-    setModels([]);
-    if (!code) return;
-    setError(null);
-    setLoadingModels(true);
-    try {
-      const enc = encodeURIComponent(code);
-      const result = await readApiJson(`/api/fipe/cars/brands/${enc}/models`);
-      if (!result.ok) {
-        setError(result.message);
+  const loadModels = useCallback(
+    async (code: string) => {
+      const gen = ++loadGen.current;
+      setBrandCode(code);
+      setModels([]);
+      setImportResult(null);
+      setExportHint(null);
+      setYearsProgress({ done: 0, total: 0 });
+      if (!code) {
+        setLoadingYears(false);
         return;
       }
-      const list = normalizeList(result.data);
-      setModels(list);
-      if (list.length === 0) {
-        setError("Nenhum modelo retornado para esta marca (lista vazia ou formato inesperado).");
+      setError(null);
+      setLoadingModels(true);
+      setLoadingYears(false);
+      try {
+        const enc = encodeURIComponent(code);
+        const result = await readApiJson(`/api/fipe/${vehicleType}/brands/${enc}/models`);
+        if (loadGen.current !== gen) return;
+        if (!result.ok) {
+          setError(result.message);
+          return;
+        }
+        const list = normalizeList(result.data);
+        if (list.length === 0) {
+          setError("Nenhum modelo retornado para esta marca (lista vazia ou formato inesperado).");
+          setModels([]);
+          return;
+        }
+        const rows: ModelRow[] = list.map((m) => ({
+          ...m,
+          anos: [],
+          anosStatus: "pending",
+        }));
+        setModels(rows);
+        setLoadingModels(false);
+        setLoadingYears(true);
+        setYearsProgress({ done: 0, total: rows.length });
+
+        await mapPool(
+          rows,
+          YEARS_CONCURRENCY,
+          async (model) => {
+            if (loadGen.current !== gen) return;
+            const yearsPath = `/api/fipe/${vehicleType}/brands/${enc}/models/${encodeURIComponent(model.code)}/years`;
+            const yearsRes = await readApiJson(yearsPath);
+            if (loadGen.current !== gen) return;
+            const anos = yearsRes.ok ? extractYearsFromFipePayload(yearsRes.data) : [];
+            const anosStatus: ModelRow["anosStatus"] = yearsRes.ok ? "ready" : "error";
+            setModels((prev) =>
+              prev.map((m) => (m.code === model.code && m.name === model.name ? { ...m, anos, anosStatus } : m)),
+            );
+            setYearsProgress((p) => ({ ...p, done: Math.min(p.total, p.done + 1) }));
+          },
+          () => loadGen.current !== gen,
+        );
+      } finally {
+        if (loadGen.current === gen) {
+          setLoadingModels(false);
+          setLoadingYears(false);
+        }
       }
-    } finally {
-      setLoadingModels(false);
-    }
-  }, []);
+    },
+    [vehicleType],
+  );
+
+  function runImport() {
+    if (!selectedBrand || !canImport) return;
+    setConfirmImport(false);
+    setImportResult(null);
+    startImport(async () => {
+      const result = await importFipeBrand({
+        marcaNome: selectedBrand.name,
+        vehicleType,
+        modelos: models.map((m) => ({ nome: m.name, anos: m.anos })),
+      });
+      setImportResult(result);
+    });
+  }
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
+      <ConfirmDialog
+        open={confirmImport}
+        onOpenChange={setConfirmImport}
+        title="Importar para o catálogo?"
+        variant="neutral"
+        pending={importing}
+        confirmLabel="Sim, gravar no banco"
+        description={
+          selectedBrand ? (
+            <>
+              Vai cadastrar a marca <strong className="text-gray-800">“{selectedBrand.name}”</strong> com{" "}
+              <strong className="text-gray-800">{models.length}</strong> modelo(s) e os anos listados na FIPE.
+              Itens que já existem não são duplicados.
+            </>
+          ) : (
+            "Selecione uma marca primeiro."
+          )
+        }
+        onConfirm={runImport}
+      />
+
       <div className="rounded-2xl border border-store-line bg-white p-6 shadow-sm sm:p-8">
         <p className="text-xs font-bold uppercase tracking-wide text-store-navy-muted">Ferramenta</p>
         <h1 className="mt-2 text-2xl font-black text-store-navy sm:text-3xl">Consulta FIPE (marcas e modelos)</h1>
         <p className="mt-3 text-sm leading-relaxed text-store-navy-muted">
-          Carrega dados da API Parallelum via <code className="rounded bg-store-subtle px-1.5 py-0.5 text-xs">/api/fipe</code>{" "}
-          no servidor. Use para validar token e listagem de modelos cadastrados na tabela FIPE.
+          Liste marcas, modelos e anos da tabela FIPE. Depois grave direto no catálogo (Supabase). Caminhão vem da
+          FIPE de caminhões; camionete é sugerida pelo nome (a FIPE não separa picape).
         </p>
+
+        <div className="mt-6">
+          <p className="text-sm font-semibold text-store-navy">Tipo na FIPE</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (vehicleType === "cars") return;
+                setVehicleType("cars");
+                resetCatalog();
+              }}
+              className={`rounded-lg px-3 py-2 text-sm font-bold transition ${
+                vehicleType === "cars"
+                  ? "bg-store-navy text-white"
+                  : "border border-store-line bg-white text-store-navy hover:bg-store-subtle"
+              }`}
+            >
+              Carros
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (vehicleType === "trucks") return;
+                setVehicleType("trucks");
+                resetCatalog();
+              }}
+              className={`rounded-lg px-3 py-2 text-sm font-bold transition ${
+                vehicleType === "trucks"
+                  ? "bg-store-navy text-white"
+                  : "border border-store-line bg-white text-store-navy hover:bg-store-subtle"
+              }`}
+            >
+              Caminhões
+            </button>
+          </div>
+        </div>
 
         <div className="mt-6 flex flex-wrap gap-3">
           <button
@@ -228,6 +436,36 @@ export function ConsultaFipeClient() {
           </div>
         ) : null}
 
+        {importResult?.ok === false ? (
+          <div
+            role="alert"
+            className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900"
+          >
+            {importResult.message}
+          </div>
+        ) : null}
+
+        {importResult?.ok === true ? (
+          <div
+            role="status"
+            className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950"
+          >
+            <p className="font-semibold text-emerald-900">
+              {importResult.marca.status === "created" ? "Marca cadastrada" : "Marca já existia"}:{" "}
+              {importResult.marca.nome}
+            </p>
+            <p className="mt-1">
+              {importResult.modelosNovos} modelo(s) novo(s), {importResult.modelosExistentes} já existiam,{" "}
+              {importResult.anosInseridos} ano(s) inserido(s).
+            </p>
+            <p className="mt-2">
+              <Link href="/admin/marcas-e-modelos" className="font-semibold text-admin-accent hover:underline">
+                Ver em Marcas e modelos
+              </Link>
+            </p>
+          </div>
+        ) : null}
+
         {sortedBrands.length > 0 ? (
           <div className="mt-6 space-y-2">
             <label htmlFor="fipe-marca" className="block text-sm font-semibold text-store-navy">
@@ -238,7 +476,7 @@ export function ConsultaFipeClient() {
               className="w-full rounded-lg border border-store-line bg-white px-3 py-2.5 text-sm text-store-navy shadow-sm focus:border-store-navy focus:outline-none focus:ring-1 focus:ring-store-navy"
               value={brandCode}
               onChange={(e) => void loadModels(e.target.value)}
-              disabled={loadingModels}
+              disabled={loadingModels || loadingYears}
             >
               <option value="">Selecione uma marca…</option>
               {sortedBrands.map((b) => (
@@ -254,132 +492,165 @@ export function ConsultaFipeClient() {
 
       {brandCode ? (
         <div className="rounded-2xl border border-store-line bg-white p-6 shadow-sm sm:p-8">
-          <h2 className="text-lg font-bold text-store-navy">Modelos</h2>
-          <div className="mt-4 rounded-xl border border-dashed border-store-line bg-store-subtle/40 p-4">
-            <p className="text-sm font-semibold text-store-navy">Exportar para o Supabase (admin)</p>
-            <p className="mt-1 text-xs leading-relaxed text-store-navy-muted">
-              Gera um <strong>JSON</strong> (marca, modelos, anos) e um <strong>SQL</strong> idempotente igual ao seed FIPE do projeto —
-              para colar no SQL Editor ou salvar em <code className="text-xs">supabase/migrations/</code>. É necessário estar logado como{" "}
-              <strong>administrador</strong>.
-            </p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <div>
-                <label htmlFor="fipe-anos-mode" className="block text-xs font-semibold text-store-navy">
-                  Anos no Supabase
-                </label>
-                <select
-                  id="fipe-anos-mode"
-                  value={anosMode}
-                  onChange={(e) =>
-                    setAnosMode(e.target.value as "fipe" | "fipe_or_range" | "range" | "none")
-                  }
-                  className="mt-1 w-full rounded-lg border border-store-line bg-white px-2 py-2 text-xs text-store-navy"
-                >
-                  <option value="fipe">Só FIPE (uma requisição por modelo)</option>
-                  <option value="fipe_or_range">
-                    FIPE e, se vazio, preencher com intervalo (recomendado se a FIPE não trouxe anos)
-                  </option>
-                  <option value="range">Só intervalo em massa (rápido; mesmo intervalo para todos)</option>
-                  <option value="none">Sem anos (só marcas/modelos)</option>
-                </select>
-              </div>
-              <div className="flex gap-2 sm:col-span-2">
-                <div className="flex-1">
-                  <label htmlFor="fipe-ano-desde" className="block text-xs font-semibold text-store-navy">
-                    Ano desde
-                  </label>
-                  <input
-                    id="fipe-ano-desde"
-                    type="number"
-                    min={1900}
-                    max={2100}
-                    value={anoDesde}
-                    onChange={(e) => setAnoDesde(Number(e.target.value) || 1990)}
-                    className="mt-1 w-full rounded-lg border border-store-line px-2 py-2 text-xs"
-                  />
-                </div>
-                <div className="flex-1">
-                  <label htmlFor="fipe-ano-ate" className="block text-xs font-semibold text-store-navy">
-                    Ano até
-                  </label>
-                  <input
-                    id="fipe-ano-ate"
-                    type="number"
-                    min={1900}
-                    max={2100}
-                    value={anoAte}
-                    onChange={(e) => setAnoAte(Number(e.target.value) || new Date().getFullYear())}
-                    className="mt-1 w-full rounded-lg border border-store-line px-2 py-2 text-xs"
-                  />
-                </div>
-              </div>
-            </div>
-            <div className="mt-3 space-y-2 rounded-lg border border-store-line/80 bg-white/60 p-3">
-              <label className="flex cursor-pointer items-start gap-2 text-xs text-store-navy">
-                <input
-                  type="checkbox"
-                  checked={onlyModeloAnos}
-                  onChange={(e) => setOnlyModeloAnos(e.target.checked)}
-                  className="mt-0.5 rounded border-store-line"
-                />
-                <span>
-                  <strong>Só completar anos</strong> — gera SQL apenas com <code className="text-[10px]">modelo_anos</code>{" "}
-                  (marca e modelos já existem no Supabase). Os slugs dos modelos no SQL seguem a mesma regra deste export.
-                </span>
-              </label>
-              {onlyModeloAnos ? (
-                <div>
-                  <label htmlFor="fipe-marca-slug-sql" className="block text-xs font-semibold text-store-navy">
-                    Slug da marca no Supabase (opcional)
-                  </label>
-                  <input
-                    id="fipe-marca-slug-sql"
-                    type="text"
-                    placeholder="ex.: volkswagen — só se for diferente do slug calculado pela FIPE"
-                    value={marcaSlugSql}
-                    onChange={(e) => setMarcaSlugSql(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-store-line px-2 py-2 text-xs"
-                  />
-                </div>
-              ) : null}
-              {onlyModeloAnos && anosMode === "none" ? (
-                <p className="text-xs text-amber-800">Escolha um modo de anos diferente de «sem anos».</p>
-              ) : null}
-            </div>
+          <h2 className="text-lg font-bold text-store-navy">Modelos e anos</h2>
+          <p className="mt-1 text-sm text-store-navy-muted">
+            Os anos vêm da FIPE para cada modelo. O import grava exatamente o que está listado abaixo.
+          </p>
+
+          <div className="mt-4 flex flex-wrap items-center gap-3">
             <button
               type="button"
-              disabled={exporting || !brandCode || (onlyModeloAnos && anosMode === "none")}
-              onClick={() => void downloadMigrationBundle()}
-              className="mt-3 inline-flex rounded-lg border border-store-line bg-white px-4 py-2 text-sm font-bold text-store-navy transition hover:bg-store-subtle disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={!canImport}
+              onClick={() => setConfirmImport(true)}
+              className="inline-flex rounded-lg bg-store-navy px-4 py-2.5 text-sm font-bold text-white transition hover:bg-store-navy/90 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {exporting ? "Gerando JSON e SQL… (pode levar vários minutos)" : "Baixar JSON + SQL desta marca"}
+              {importing ? "Gravando no catálogo…" : "Importar para o catálogo"}
             </button>
-            {exportHint ? (
-              <p className="mt-2 text-xs text-store-navy-muted" role="status">
-                {exportHint}
-              </p>
+            {loadingYears ? (
+              <span className="text-xs text-store-navy-muted">
+                Carregando anos… {yearsProgress.done}/{yearsProgress.total}
+              </span>
             ) : null}
           </div>
+
           {loadingModels ? (
             <p className="mt-4 text-sm text-store-navy-muted">Carregando modelos…</p>
-          ) : models.length > 0 ? (
+          ) : sortedModels.length > 0 ? (
             <>
-              <p className="mt-1 text-sm text-store-navy-muted">
-                {models.length} modelo(s) para a marca selecionada.
+              <p className="mt-4 text-sm text-store-navy-muted">
+                {sortedModels.length} modelo(s) para {selectedBrand?.name ?? "a marca selecionada"}.
               </p>
-              <ul className="mt-4 max-h-[420px] divide-y divide-store-line overflow-y-auto rounded-xl border border-store-line">
-                {[...models]
-                  .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
-                  .map((m) => (
+              <ul className="mt-4 max-h-[520px] divide-y divide-store-line overflow-y-auto rounded-xl border border-store-line">
+                {sortedModels.map((m) => {
+                  const tipo = classifyTipoVeiculoModelo(vehicleType, m.name);
+                  return (
                     <li key={`${m.code}-${m.name}`} className="px-4 py-2.5 text-sm text-store-navy">
-                      <span className="font-medium">{m.name}</span>
-                      <span className="ml-2 text-store-navy-muted">código {m.code}</span>
+                      <div className="flex flex-wrap items-baseline gap-x-2">
+                        <span className="font-medium">{m.name}</span>
+                        <span className="text-xs text-store-navy-muted">
+                          {TIPO_VEICULO_MODELO_LABELS[tipo]} · código {m.code}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 text-xs text-store-navy-muted">
+                        {m.anosStatus === "pending"
+                          ? "Carregando anos…"
+                          : m.anosStatus === "error"
+                            ? "Não foi possível obter os anos (o modelo pode ser importado sem anos)."
+                            : formatYearRanges(m.anos)}
+                      </p>
                     </li>
-                  ))}
+                  );
+                })}
               </ul>
             </>
           ) : !error ? (
             <p className="mt-4 text-sm text-store-navy-muted">Selecione uma marca para ver os modelos.</p>
+          ) : null}
+
+          {vehicleType === "cars" ? (
+            <div className="mt-6 rounded-xl border border-dashed border-store-line bg-store-subtle/40 p-4">
+              <p className="text-sm font-semibold text-store-navy">Backup SQL (opcional)</p>
+              <p className="mt-1 text-xs leading-relaxed text-store-navy-muted">
+                Gera JSON e SQL para colar no SQL Editor. O fluxo principal é o botão de importar acima.
+              </p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="fipe-anos-mode" className="block text-xs font-semibold text-store-navy">
+                    Anos no SQL
+                  </label>
+                  <select
+                    id="fipe-anos-mode"
+                    value={anosMode}
+                    onChange={(e) =>
+                      setAnosMode(e.target.value as "fipe" | "fipe_or_range" | "range" | "none")
+                    }
+                    className="mt-1 w-full rounded-lg border border-store-line bg-white px-2 py-2 text-xs text-store-navy"
+                  >
+                    <option value="fipe">Só FIPE (uma requisição por modelo)</option>
+                    <option value="fipe_or_range">
+                      FIPE e, se vazio, preencher com intervalo (recomendado se a FIPE não trouxe anos)
+                    </option>
+                    <option value="range">Só intervalo em massa (rápido; mesmo intervalo para todos)</option>
+                    <option value="none">Sem anos (só marcas/modelos)</option>
+                  </select>
+                </div>
+                <div className="flex gap-2 sm:col-span-2">
+                  <div className="flex-1">
+                    <label htmlFor="fipe-ano-desde" className="block text-xs font-semibold text-store-navy">
+                      Ano desde
+                    </label>
+                    <input
+                      id="fipe-ano-desde"
+                      type="number"
+                      min={1900}
+                      max={2100}
+                      value={anoDesde}
+                      onChange={(e) => setAnoDesde(Number(e.target.value) || 1990)}
+                      className="mt-1 w-full rounded-lg border border-store-line px-2 py-2 text-xs"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label htmlFor="fipe-ano-ate" className="block text-xs font-semibold text-store-navy">
+                      Ano até
+                    </label>
+                    <input
+                      id="fipe-ano-ate"
+                      type="number"
+                      min={1900}
+                      max={2100}
+                      value={anoAte}
+                      onChange={(e) => setAnoAte(Number(e.target.value) || new Date().getFullYear())}
+                      className="mt-1 w-full rounded-lg border border-store-line px-2 py-2 text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 space-y-2 rounded-lg border border-store-line/80 bg-white/60 p-3">
+                <label className="flex cursor-pointer items-start gap-2 text-xs text-store-navy">
+                  <input
+                    type="checkbox"
+                    checked={onlyModeloAnos}
+                    onChange={(e) => setOnlyModeloAnos(e.target.checked)}
+                    className="mt-0.5 rounded border-store-line"
+                  />
+                  <span>
+                    <strong>Só completar anos</strong> — gera SQL apenas com <code className="text-[10px]">modelo_anos</code>{" "}
+                    (marca e modelos já existem no Supabase).
+                  </span>
+                </label>
+                {onlyModeloAnos ? (
+                  <div>
+                    <label htmlFor="fipe-marca-slug-sql" className="block text-xs font-semibold text-store-navy">
+                      Slug da marca no Supabase (opcional)
+                    </label>
+                    <input
+                      id="fipe-marca-slug-sql"
+                      type="text"
+                      placeholder="ex.: volkswagen — só se for diferente do slug calculado pela FIPE"
+                      value={marcaSlugSql}
+                      onChange={(e) => setMarcaSlugSql(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-store-line px-2 py-2 text-xs"
+                    />
+                  </div>
+                ) : null}
+                {onlyModeloAnos && anosMode === "none" ? (
+                  <p className="text-xs text-amber-800">Escolha um modo de anos diferente de «sem anos».</p>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                disabled={exporting || !brandCode || (onlyModeloAnos && anosMode === "none")}
+                onClick={() => void downloadMigrationBundle()}
+                className="mt-3 inline-flex rounded-lg border border-store-line bg-white px-4 py-2 text-sm font-bold text-store-navy transition hover:bg-store-subtle disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {exporting ? "Gerando JSON e SQL… (pode levar vários minutos)" : "Baixar JSON + SQL desta marca"}
+              </button>
+              {exportHint ? (
+                <p className="mt-2 text-xs text-store-navy-muted" role="status">
+                  {exportHint}
+                </p>
+              ) : null}
+            </div>
           ) : null}
         </div>
       ) : null}

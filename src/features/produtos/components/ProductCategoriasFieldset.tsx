@@ -28,7 +28,7 @@ export function ProductCategoriasFieldset({
           .
         </p>
       ) : (
-        <ul className="mt-3 max-h-48 space-y-2 overflow-y-auto pr-1">
+        <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3 lg:grid-cols-4">
           {categorias.map((c) => (
             <li key={c.id}>
               <label className="flex cursor-pointer items-center gap-2.5 text-sm text-gray-800">

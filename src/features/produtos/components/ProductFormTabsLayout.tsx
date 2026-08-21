@@ -49,7 +49,7 @@ export function ProductFormTabsLayout({
               role="tab"
               aria-selected={active}
               onClick={() => changeTab(id)}
-              className={`rounded-lg px-3.5 py-2 text-sm font-medium transition-[transform,box-shadow,background-color,color] duration-150 active:scale-[0.98] sm:px-4 ${
+              className={`flex-1 rounded-lg px-3.5 py-2 text-center text-sm font-medium transition-[transform,box-shadow,background-color,color] duration-150 active:scale-[0.98] sm:px-4 ${
                 active
                   ? "bg-white text-gray-900 shadow-sm ring-1 ring-gray-200/80"
                   : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"

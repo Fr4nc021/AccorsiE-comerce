@@ -5,6 +5,13 @@
 
 const FIPE_API_BASE = "https://fipe.parallelum.com.br/api/v2";
 
+export const FIPE_VEHICLE_TYPES = ["cars", "trucks"] as const;
+export type FipeVehicleType = (typeof FIPE_VEHICLE_TYPES)[number];
+
+export function isFipeVehicleType(value: string): value is FipeVehicleType {
+  return value === "cars" || value === "trucks";
+}
+
 export type FipeFetchResult =
   | { ok: true; data: unknown }
   | { ok: false; status: number; message: string };
@@ -33,24 +40,25 @@ export function resolveParallelumGetUrl(segments: string[]): string | null {
     return `${FIPE_API_BASE}/references`;
   }
 
-  if (segments.length === 2 && segments[0] === "cars" && segments[1] === "brands") {
-    return `${FIPE_API_BASE}/cars/brands`;
+  const vehicleType = segments[0];
+  if (!vehicleType || !isFipeVehicleType(vehicleType)) return null;
+
+  if (segments.length === 2 && segments[1] === "brands") {
+    return `${FIPE_API_BASE}/${vehicleType}/brands`;
   }
 
   if (
     segments.length === 4 &&
-    segments[0] === "cars" &&
     segments[1] === "brands" &&
     segments[3] === "models" &&
     isSafeFipePathSegment(segments[2])
   ) {
     const brand = encodeURIComponent(segments[2]);
-    return `${FIPE_API_BASE}/cars/brands/${brand}/models`;
+    return `${FIPE_API_BASE}/${vehicleType}/brands/${brand}/models`;
   }
 
   if (
     segments.length === 6 &&
-    segments[0] === "cars" &&
     segments[1] === "brands" &&
     segments[3] === "models" &&
     segments[5] === "years" &&
@@ -59,7 +67,7 @@ export function resolveParallelumGetUrl(segments: string[]): string | null {
   ) {
     const brand = encodeURIComponent(segments[2]);
     const model = encodeURIComponent(segments[4]);
-    return `${FIPE_API_BASE}/cars/brands/${brand}/models/${model}/years`;
+    return `${FIPE_API_BASE}/${vehicleType}/brands/${brand}/models/${model}/years`;
   }
 
   return null;
