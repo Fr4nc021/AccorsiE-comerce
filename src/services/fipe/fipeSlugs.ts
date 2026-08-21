@@ -46,6 +46,26 @@ export function parseAnoFromFipeCode(codigo: unknown): number | null {
   return y;
 }
 
+function yearsArrayFromPayload(data: unknown): unknown[] {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === "object") {
+    const o = data as Record<string, unknown>;
+    const inner = o.years ?? o.anos ?? o.data;
+    if (Array.isArray(inner)) return inner;
+  }
+  return [];
+}
+
+/** Extrai anos únicos (1900–2100) da resposta de `.../years` da FIPE. */
+export function extractYearsFromFipePayload(data: unknown): number[] {
+  const years = new Set<number>();
+  for (const entry of yearsArrayFromPayload(data)) {
+    const y = extractYearFromFipeYearEntry(entry);
+    if (y != null) years.add(y);
+  }
+  return [...years].sort((a, b) => a - b);
+}
+
 /** Entrada típica do endpoint de anos FIPE (`code`/`name` ou string solta). */
 export function extractYearFromFipeYearEntry(entry: unknown): number | null {
   if (entry == null) return null;

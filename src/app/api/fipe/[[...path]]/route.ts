@@ -8,9 +8,9 @@ import { fetchParallelumJson, resolveParallelumGetUrl } from "@/services/fipe/pa
  *
  * Caminhos suportados (GET):
  * - /api/fipe/references
- * - /api/fipe/cars/brands
- * - /api/fipe/cars/brands/{brandCode}/models
- * - /api/fipe/cars/brands/{brandCode}/models/{modelCode}/years
+ * - /api/fipe/{cars|trucks}/brands
+ * - /api/fipe/{cars|trucks}/brands/{brandCode}/models
+ * - /api/fipe/{cars|trucks}/brands/{brandCode}/models/{modelCode}/years
  */
 export async function GET(
   _request: Request,
@@ -31,7 +31,7 @@ export async function GET(
     return NextResponse.json(
       {
         message:
-          "Caminho inválido. Use: /api/fipe/references, /api/fipe/cars/brands, /api/fipe/cars/brands/{code}/models ou .../models/{code}/years.",
+          "Caminho inválido. Use: /api/fipe/references, /api/fipe/{cars|trucks}/brands, /api/fipe/{cars|trucks}/brands/{code}/models ou .../models/{code}/years.",
       },
       { status: 400 },
     );

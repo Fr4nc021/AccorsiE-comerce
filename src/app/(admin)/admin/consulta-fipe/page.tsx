@@ -4,7 +4,7 @@ import { ConsultaFipeClient } from "@/features/fipe-consulta/components/Consulta
 
 export const metadata: Metadata = {
   title: "Consulta FIPE | Admin",
-  description: "Lista marcas e modelos da tabela FIPE via API (integração admin).",
+  description: "Lista marcas, modelos e anos da tabela FIPE e importa para o catálogo.",
 };
 
 export default function ConsultaFipePage() {
