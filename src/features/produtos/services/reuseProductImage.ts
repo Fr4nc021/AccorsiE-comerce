@@ -5,7 +5,7 @@ import { revalidateStoreCatalogCache } from "@/features/produtos/utils/catalogCa
 
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/services/supabase/server";
-import { removeProductImageFromStorage } from "@/services/storage/removeProductImage";
+import { removeProductImageIfUnused } from "@/services/storage/removeProductImage";
 
 export type ReuseProductImageResult =
   | {
@@ -45,24 +45,6 @@ async function resolveSourceFotoRef(
   const first = principal ?? rows[0];
   const fromGallery = first?.foto != null ? String(first.foto).trim() : "";
   return { fotoRef: fromGallery || null, titulo };
-}
-
-/** Verifica se alguma linha em produtos / produto_fotos ainda usa a ref. */
-async function fotoRefStillInUse(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  fotoRef: string
-): Promise<boolean> {
-  const [{ count: prodCount }, { count: galCount }] = await Promise.all([
-    supabase
-      .from("produtos")
-      .select("id", { count: "exact", head: true })
-      .eq("foto", fotoRef),
-    supabase
-      .from("produto_fotos")
-      .select("id", { count: "exact", head: true })
-      .eq("foto", fotoRef),
-  ]);
-  return (prodCount ?? 0) > 0 || (galCount ?? 0) > 0;
 }
 
 /**
@@ -184,10 +166,7 @@ export async function reuseProductImage(input: {
   }
 
   for (const ref of previousRefs) {
-    const stillUsed = await fotoRefStillInUse(supabase, ref);
-    if (!stillUsed) {
-      await removeProductImageFromStorage(ref);
-    }
+    await removeProductImageIfUnused(ref);
   }
 
   revalidatePath("/");

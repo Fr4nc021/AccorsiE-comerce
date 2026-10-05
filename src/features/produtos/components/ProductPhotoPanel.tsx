@@ -245,9 +245,30 @@ export function ProductPhotoPanel({
     setPhotos((prev) => (samePhotoList(prev, next) ? prev : next));
   }, [initialFoto, initialFotos]);
 
+  const dropPhotoFromGallery = (ref: string) => {
+    setPhotos((prev) => {
+      const next = prev.filter((item) => item.foto !== ref).map((item, idx) => ({ ...item, ordem: idx }));
+      if (next.length > 0 && !next.some((item) => item.is_principal)) {
+        next[0] = { ...next[0], is_principal: true };
+      }
+      return next;
+    });
+  };
+
   const handleExcluirImagem = async (ref: string) => {
     if (!ref) return;
     setError(null);
+
+    const persisted =
+      initialFoto.trim() === ref ||
+      initialFotos.some((item) => String(item.foto ?? "").trim() === ref);
+    // Foto já salva pode estar reutilizada em outros produtos. Só sai da galeria deste
+    // formulário; o arquivo no Storage é apagado no save, e apenas se ninguém mais usar.
+    if (persisted) {
+      dropPhotoFromGallery(ref);
+      return;
+    }
+
     setRemovingFoto(ref);
     try {
       const bucket = productImagesBucket();
@@ -261,13 +282,7 @@ export function ProductPhotoPanel({
           return;
         }
       }
-      setPhotos((prev) => {
-        const next = prev.filter((item) => item.foto !== ref).map((item, idx) => ({ ...item, ordem: idx }));
-        if (next.length > 0 && !next.some((item) => item.is_principal)) {
-          next[0] = { ...next[0], is_principal: true };
-        }
-        return next;
-      });
+      dropPhotoFromGallery(ref);
     } finally {
       setRemovingFoto(null);
     }

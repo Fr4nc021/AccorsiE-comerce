@@ -2,7 +2,7 @@
 
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/services/supabase/server";
-import { removeProductImageFromStorage } from "@/services/storage/removeProductImage";
+import { removeProductImageIfUnused } from "@/services/storage/removeProductImage";
 import { revalidatePath } from "next/cache";
 import { revalidateStoreCatalogCache } from "@/features/produtos/utils/catalogCacheTags";
 import { redirect } from "next/navigation";
@@ -41,7 +41,7 @@ async function deleteOneProduct(
   }
 
   if (row?.foto) {
-    await removeProductImageFromStorage(row.foto);
+    await removeProductImageIfUnused(row.foto);
   }
 
   return { ok: true };

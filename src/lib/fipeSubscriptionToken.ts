@@ -1,17 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { loadEnvConfig } from "@next/env";
-
 const KEY = "FIPE_SUBSCRIPTION_TOKEN";
-
-let didLoadNextEnv = false;
-
-function ensureNextEnvLoaded(): void {
-  if (didLoadNextEnv) return;
-  loadEnvConfig(process.cwd());
-  didLoadNextEnv = true;
-}
 
 function parseValueFromLine(line: string): string | null {
   const t = line.trim();
@@ -30,29 +20,40 @@ function parseValueFromLine(line: string): string | null {
   return val.length > 0 ? val : null;
 }
 
+function readTokenFromFile(filePath: string): string | null {
+  if (!existsSync(filePath)) return null;
+  try {
+    const text = readFileSync(filePath, "utf8");
+    for (const line of text.split(/\r?\n/)) {
+      const value = parseValueFromLine(line);
+      if (value) return value;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 /**
- * Token FIPE para rotas de API. Usa `process.env` após `loadEnvConfig`; se vazio, lê `.env.local` / `.env` no `cwd`
- * (fallback para ambientes em que o Next não injeta a variável nas Route Handlers).
+ * Fallback só de desenvolvimento. Em produção o Next/Vercel já injeta `process.env`.
+ * `loadEnvConfig(process.cwd())` e `join(process.cwd(), nomeDinamico)` fazem o file
+ * tracer incluir o projeto inteiro na função serverless (estoura o limite de 250 MB).
+ * O comentário turbopackIgnore evita esse rastreio mesmo neste fallback.
+ */
+function readTokenFromDevEnvFiles(): string {
+  const envLocal = join(/*turbopackIgnore: true*/ process.cwd(), ".env.local");
+  const envFile = join(/*turbopackIgnore: true*/ process.cwd(), ".env");
+  return readTokenFromFile(envLocal) ?? readTokenFromFile(envFile) ?? "";
+}
+
+/**
+ * Token FIPE para rotas de API.
+ * Produção: somente `process.env.FIPE_SUBSCRIPTION_TOKEN`.
+ * Desenvolvimento: se a variável não veio no ambiente, lê `.env.local` e `.env`.
  */
 export function getFipeSubscriptionToken(): string {
-  ensureNextEnvLoaded();
   const fromEnv = process.env[KEY]?.trim() ?? "";
   if (fromEnv) return fromEnv;
-
-  const root = process.cwd();
-  for (const name of [".env.local", ".env"]) {
-    const p = join(root, name);
-    if (!existsSync(p)) continue;
-    try {
-      const text = readFileSync(p, "utf8");
-      for (const line of text.split(/\r?\n/)) {
-        const v = parseValueFromLine(line);
-        if (v) return v;
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-
-  return "";
+  if (process.env.NODE_ENV === "production") return "";
+  return readTokenFromDevEnvFiles();
 }

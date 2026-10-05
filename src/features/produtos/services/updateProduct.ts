@@ -21,7 +21,7 @@ import {
 import { validateProductForPublish } from "@/features/produtos/utils/validateProductForPublish";
 import { parseProductPhotoGalleryFromForm } from "@/features/produtos/services/productPhotoGalleryForm";
 import { createClient } from "@/services/supabase/server";
-import { removeProductImageFromStorage } from "@/services/storage/removeProductImage";
+import { removeProductImageIfUnused } from "@/services/storage/removeProductImage";
 import { revalidatePath } from "next/cache";
 import { revalidateStoreCatalogCache } from "@/features/produtos/utils/catalogCacheTags";
 
@@ -194,7 +194,7 @@ export async function updateProduct(
   const nextRefs = new Set(galleryParsed.photos.map((photo) => photo.foto));
   for (const ref of previousRefs) {
     if (!nextRefs.has(ref)) {
-      await removeProductImageFromStorage(ref);
+      await removeProductImageIfUnused(ref);
     }
   }
 

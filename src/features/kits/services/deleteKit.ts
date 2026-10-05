@@ -2,7 +2,7 @@
 
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { createClient } from "@/services/supabase/server";
-import { removeProductImageFromStorage } from "@/services/storage/removeProductImage";
+import { removeProductImageIfUnused } from "@/services/storage/removeProductImage";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -18,7 +18,7 @@ export async function deleteKit(kitId: string): Promise<{ ok: false; message: st
   if (error) return { ok: false, message: error.message };
 
   if (row?.imagem) {
-    await removeProductImageFromStorage(row.imagem);
+    await removeProductImageIfUnused(row.imagem);
   }
 
   revalidatePath("/");
