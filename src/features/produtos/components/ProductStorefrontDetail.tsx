@@ -107,9 +107,6 @@ export function ProductStorefrontDetail({
                   <p className="mb-0.5 text-sm font-semibold text-orange-500 sm:text-base">
                     {pixDestaque ? `PIX (${produto.desconto_pix_percent}% OFF)` : "PIX"}
                   </p>
-                  <p className="mb-0.5 text-sm font-semibold tabular-nums text-black sm:text-base">
-                    {money.format(produto.valor)}
-                  </p>
                 </div>
                 <p className={`text-sm font-semibold ${outOfStock ? "text-red-700" : "text-emerald-700"}`}>
                   {stockText}
@@ -156,7 +153,6 @@ export function ProductStorefrontDetail({
             </header>
             <ProductsGrid
               variant="catalog"
-              pixStyle="home"
               produtos={relacionados}
               emptyMessage="Ainda não encontramos produtos relacionados para este item."
             />
