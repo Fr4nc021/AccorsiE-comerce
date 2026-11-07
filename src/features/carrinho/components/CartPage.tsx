@@ -6,9 +6,17 @@ import { useMemo } from "react";
 
 import { storeShellContent, storeShellInset } from "@/config/storeShell";
 import { CART_ICON_SRC } from "@/features/carrinho/constants";
-import { useCart } from "@/features/carrinho/CartContext";
+import { kitClaimDesconto, useCart } from "@/features/carrinho/CartContext";
+import { FreteGratisProgress } from "@/features/frete/components/FreteGratisProgress";
+import { FreteGratisSugestoes } from "@/features/frete/components/FreteGratisSugestoes";
+import { FreteOpcaoPreco } from "@/features/frete/components/FreteOpcaoPreco";
 import { useFreteQuote } from "@/features/frete/hooks/useFreteQuote";
+import { faltaParaFreteGratis, isFreteGratis } from "@/features/frete/utils/freteGratis";
 import { cartRequiresSomenteRetirada } from "@/features/produtos/utils/mapProductSummaryRow";
+import {
+  type FormaPagamentoCheckout,
+  unitPriceAfterPaymentDiscount,
+} from "@/features/produtos/utils/paymentDiscount";
 
 const money = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -34,20 +42,38 @@ type CartPageProps = {
 };
 
 export function CartPage({ initialProfileCep = "" }: CartPageProps) {
-  const { lines, itemCount, subtotal, increment, decrement, removeProduct } = useCart();
+  const { lines, itemCount, subtotal, kitClaims, increment, decrement, removeProduct } = useCart();
   const hasItems = lines.length > 0;
   const itensPayload = useMemo(
     () => lines.map((l) => ({ produto_id: l.id, quantidade: l.quantity })),
     [lines],
   );
+  const idsNoCarrinho = useMemo(() => lines.map((l) => l.id), [lines]);
   const exigeRetiradaLoja = useMemo(() => cartRequiresSomenteRetirada(lines), [lines]);
+  /** Forma de pagamento só é escolhida no checkout: usa a mais barata para não prometer frete grátis indevido. */
+  const valorProdutosFrete = useMemo(() => {
+    const porForma = (forma: FormaPagamentoCheckout) => {
+      const sub = lines.reduce(
+        (s, l) =>
+          s +
+          unitPriceAfterPaymentDiscount(l.valor, forma, l.desconto_pix_percent, l.desconto_cartao_percent) *
+            l.quantity,
+        0,
+      );
+      const kit = kitClaims.reduce((s, c) => s + kitClaimDesconto(c, lines, forma), 0);
+      return Math.max(0, sub - kit);
+    };
+    return Math.min(porForma("pix"), porForma("cartao"));
+  }, [lines, kitClaims]);
+  const freteGratis = !exigeRetiradaLoja && isFreteGratis(valorProdutosFrete);
   const profileCep = initialProfileCep.trim();
   const missingProfileCep =
     hasItems && !exigeRetiradaLoja && profileCep.replace(/\D/g, "").length !== 8;
-  const frete = useFreteQuote(itensPayload, profileCep, hasItems && !exigeRetiradaLoja);
+  const frete = useFreteQuote(itensPayload, profileCep, hasItems && !exigeRetiradaLoja, freteGratis);
   const shipping =
     hasItems && !exigeRetiradaLoja && !missingProfileCep ? frete.freteValue : 0;
   const total = subtotal + shipping;
+  const freteSelecionadoGratis = frete.gratisId != null && frete.selectedId === frete.gratisId;
   const canGoCheckout =
     hasItems &&
     (exigeRetiradaLoja || (!missingProfileCep && Boolean(frete.selectedOption)));
@@ -67,129 +93,137 @@ export function CartPage({ initialProfileCep = "" }: CartPageProps) {
         </h1>
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_min(100%,20rem)] lg:items-start lg:gap-8">
-          <section
-            className="rounded-sm border border-store-line/80 bg-white p-5 shadow-sm sm:p-6"
-            aria-labelledby="cart-items-heading"
-          >
-            <h2 id="cart-items-heading" className="mb-5 text-lg font-bold text-black">
-              Itens ({itemCount})
-            </h2>
+          <div className="min-w-0 space-y-6">
+            <section
+              className="rounded-sm border border-store-line/80 bg-white p-5 shadow-sm sm:p-6"
+              aria-labelledby="cart-items-heading"
+            >
+              <h2 id="cart-items-heading" className="mb-5 text-lg font-bold text-black">
+                Itens ({itemCount})
+              </h2>
 
-            {!hasItems ? (
-              <div className="flex flex-col items-center rounded-sm border border-gray-100 bg-gray-50/90 px-6 py-12 text-center shadow-[0_4px_24px_rgba(0,0,0,0.04)]">
-                <div
-                  className="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-store-subtle"
-                  aria-hidden
-                >
-                  <Image
-                    src={CART_ICON_SRC}
-                    alt=""
-                    width={64}
-                    height={64}
-                    className="h-8 w-8 object-contain"
-                    unoptimized
-                  />
+              {!hasItems ? (
+                <div className="flex flex-col items-center rounded-sm border border-gray-100 bg-gray-50/90 px-6 py-12 text-center shadow-[0_4px_24px_rgba(0,0,0,0.04)]">
+                  <div
+                    className="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-store-subtle"
+                    aria-hidden
+                  >
+                    <Image
+                      src={CART_ICON_SRC}
+                      alt=""
+                      width={64}
+                      height={64}
+                      className="h-8 w-8 object-contain"
+                      unoptimized
+                    />
+                  </div>
+                  <p className="text-lg font-bold text-black">Seu carrinho está vazio</p>
+                  <p className="mt-2 max-w-sm text-sm text-black">
+                    Adicione produtos ao carrinho para continuar
+                  </p>
+                  <Link
+                    href="/produtos"
+                    className="mt-8 inline-flex min-w-[11rem] items-center justify-center rounded-full bg-store-accent px-8 py-3 text-sm font-bold text-black shadow-sm transition-[transform,filter,box-shadow] duration-150 hover:brightness-95 active:scale-[0.98]"
+                  >
+                    Ver produtos
+                  </Link>
                 </div>
-                <p className="text-lg font-bold text-black">Seu carrinho está vazio</p>
-                <p className="mt-2 max-w-sm text-sm text-black">
-                  Adicione produtos ao carrinho para continuar
-                </p>
-                <Link
-                  href="/produtos"
-                  className="mt-8 inline-flex min-w-[11rem] items-center justify-center rounded-full bg-store-accent px-8 py-3 text-sm font-bold text-black shadow-sm transition-[transform,filter,box-shadow] duration-150 hover:brightness-95 active:scale-[0.98]"
-                >
-                  Ver produtos
-                </Link>
-              </div>
-            ) : (
-              <ul className="divide-y divide-store-line/60">
-                {lines.map((line) => {
-                  const stock = Math.max(0, Math.floor(Number(line.quantidade_estoque)));
-                  const lastUnit = stock === 1;
-                  const atMax = line.quantity >= stock;
-                  return (
-                  <li key={line.id} className="py-5 first:pt-0">
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-                      <div className="flex shrink-0 gap-4">
-                        <div className="h-24 w-24 shrink-0 overflow-hidden rounded-sm border border-store-line/60 bg-store-subtle sm:h-28 sm:w-28">
-                          {line.imageUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element -- URLs externas e Storage
-                            <img
-                              src={line.imageUrl}
-                              alt={line.titulo}
-                              className="h-full w-full object-contain object-center p-1"
-                            />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center text-xs text-store-navy-muted">
-                              Sem foto
+              ) : (
+                <ul className="divide-y divide-store-line/60">
+                  {lines.map((line) => {
+                    const stock = Math.max(0, Math.floor(Number(line.quantidade_estoque)));
+                    const lastUnit = stock === 1;
+                    const atMax = line.quantity >= stock;
+                    return (
+                    <li key={line.id} className="py-5 first:pt-0">
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+                        <div className="flex shrink-0 gap-4">
+                          <div className="h-24 w-24 shrink-0 overflow-hidden rounded-sm border border-store-line/60 bg-store-subtle sm:h-28 sm:w-28">
+                            {line.imageUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element -- URLs externas e Storage
+                              <img
+                                src={line.imageUrl}
+                                alt={line.titulo}
+                                className="h-full w-full object-contain object-center p-1"
+                              />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-xs text-store-navy-muted">
+                                Sem foto
+                              </div>
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1 sm:hidden">
+                            <p className="text-right text-base font-bold text-black">
+                              {money.format(line.valor)}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <h3 className="text-base font-bold leading-snug text-black">{line.titulo}</h3>
+
+                          {lastUnit ? (
+                            <p
+                              className="mt-3 rounded-sm border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950"
+                              role="status"
+                            >
+                              Última peça disponível.
+                            </p>
+                          ) : null}
+
+                          <div className="mt-4 flex flex-wrap items-center gap-3">
+                            <span className="text-sm font-medium text-store-navy">Quantidade</span>
+                            <div className="inline-flex items-center gap-1 rounded-sm border border-store-line bg-white">
+                              <button
+                                type="button"
+                                className="flex h-9 w-9 items-center justify-center text-lg font-medium text-store-navy transition hover:bg-store-subtle"
+                                aria-label="Diminuir quantidade"
+                                onClick={() => decrement(line.id)}
+                              >
+                                −
+                              </button>
+                              <span className="min-w-[2rem] text-center text-sm font-bold tabular-nums">
+                                {line.quantity}
+                              </span>
+                              <button
+                                type="button"
+                                disabled={atMax}
+                                className="flex h-9 w-9 items-center justify-center text-lg font-medium text-store-navy transition hover:bg-store-subtle disabled:cursor-not-allowed disabled:text-store-navy-muted disabled:hover:bg-transparent"
+                                aria-label="Aumentar quantidade"
+                                onClick={() => increment(line.id)}
+                              >
+                                +
+                              </button>
                             </div>
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1 sm:hidden">
-                          <p className="text-right text-base font-bold text-black">
-                            {money.format(line.valor)}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="min-w-0 flex-1">
-                        <h3 className="text-base font-bold leading-snug text-black">{line.titulo}</h3>
-
-                        {lastUnit ? (
-                          <p
-                            className="mt-3 rounded-sm border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950"
-                            role="status"
-                          >
-                            Última peça disponível.
-                          </p>
-                        ) : null}
-
-                        <div className="mt-4 flex flex-wrap items-center gap-3">
-                          <span className="text-sm font-medium text-store-navy">Quantidade</span>
-                          <div className="inline-flex items-center gap-1 rounded-sm border border-store-line bg-white">
                             <button
                               type="button"
-                              className="flex h-9 w-9 items-center justify-center text-lg font-medium text-store-navy transition hover:bg-store-subtle"
-                              aria-label="Diminuir quantidade"
-                              onClick={() => decrement(line.id)}
+                              className="ml-1 flex h-9 w-9 items-center justify-center rounded-sm text-store-navy-muted transition hover:bg-red-50 hover:text-red-600"
+                              aria-label={`Remover ${line.titulo} do carrinho`}
+                              onClick={() => removeProduct(line.id)}
                             >
-                              −
-                            </button>
-                            <span className="min-w-[2rem] text-center text-sm font-bold tabular-nums">
-                              {line.quantity}
-                            </span>
-                            <button
-                              type="button"
-                              disabled={atMax}
-                              className="flex h-9 w-9 items-center justify-center text-lg font-medium text-store-navy transition hover:bg-store-subtle disabled:cursor-not-allowed disabled:text-store-navy-muted disabled:hover:bg-transparent"
-                              aria-label="Aumentar quantidade"
-                              onClick={() => increment(line.id)}
-                            >
-                              +
+                              <TrashIcon className="h-5 w-5" />
                             </button>
                           </div>
-                          <button
-                            type="button"
-                            className="ml-1 flex h-9 w-9 items-center justify-center rounded-sm text-store-navy-muted transition hover:bg-red-50 hover:text-red-600"
-                            aria-label={`Remover ${line.titulo} do carrinho`}
-                            onClick={() => removeProduct(line.id)}
-                          >
-                            <TrashIcon className="h-5 w-5" />
-                          </button>
                         </div>
-                      </div>
 
-                      <p className="hidden shrink-0 text-right text-base font-bold text-black sm:block sm:min-w-[6.5rem]">
-                        {money.format(line.valor)}
-                      </p>
-                    </div>
-                    <div className="mt-4 h-px w-full bg-store-accent" aria-hidden />
-                  </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
+                        <p className="hidden shrink-0 text-right text-base font-bold text-black sm:block sm:min-w-[6.5rem]">
+                          {money.format(line.valor)}
+                        </p>
+                      </div>
+                      <div className="mt-4 h-px w-full bg-store-accent" aria-hidden />
+                    </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+            {hasItems && !exigeRetiradaLoja && !freteGratis ? (
+              <FreteGratisSugestoes
+                falta={faltaParaFreteGratis(valorProdutosFrete)}
+                idsNoCarrinho={idsNoCarrinho}
+              />
+            ) : null}
+          </div>
 
           <aside
             className="rounded-sm border border-store-line/80 bg-white p-5 shadow-sm sm:p-6 lg:sticky lg:top-6"
@@ -206,9 +240,16 @@ export function CartPage({ initialProfileCep = "" }: CartPageProps) {
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-store-navy">Frete</dt>
-                <dd className="font-semibold tabular-nums text-black">{money.format(shipping)}</dd>
+                <dd
+                  className={`font-semibold tabular-nums ${freteSelecionadoGratis ? "text-emerald-700" : "text-black"}`}
+                >
+                  {freteSelecionadoGratis ? "Grátis" : money.format(shipping)}
+                </dd>
               </div>
             </dl>
+            {hasItems && !exigeRetiradaLoja ? (
+              <FreteGratisProgress valorProdutos={valorProdutosFrete} className="mt-4" />
+            ) : null}
             {hasItems ? (
               <div className="mt-4 rounded-sm border border-store-line/70 bg-store-subtle/30 p-3 text-xs text-store-navy">
                 {exigeRetiradaLoja ? (
@@ -242,7 +283,10 @@ export function CartPage({ initialProfileCep = "" }: CartPageProps) {
                             {typeof opcao.prazoDiasUteis === "number" ? ` (${opcao.prazoDiasUteis} dias uteis)` : ""}
                           </span>
                         </span>
-                        <strong>{money.format(opcao.precoCentavos / 100)}</strong>
+                        <FreteOpcaoPreco
+                          precoCentavos={opcao.precoCentavos}
+                          gratis={opcao.id === frete.gratisId}
+                        />
                       </label>
                     ))}
                   </fieldset>

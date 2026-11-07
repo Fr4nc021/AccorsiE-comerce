@@ -23,7 +23,7 @@ export type CheckoutEntregaInput = {
 
 export type CheckoutPayload = CheckoutEntregaInput & {
   itens: CheckoutCartLineInput[];
-  /** Valor do frete (reais). Zero em retirada na loja; com entrega, maior que zero. */
+  /** Valor do frete (reais). Zero em retirada na loja ou com frete grátis (mínimo validado na RPC). */
   frete: number;
   /** Define desconto por produto na RPC (`desconto_pix_percent` vs `desconto_cartao_percent`). */
   forma_pagamento: FormaPagamentoCheckout;

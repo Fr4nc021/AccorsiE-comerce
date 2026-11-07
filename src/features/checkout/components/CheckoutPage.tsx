@@ -8,7 +8,10 @@ import type { StorePickupAddress } from "@/config/storePickupAddress";
 import { formatStorePickupAddress } from "@/config/storePickupAddress";
 import { kitClaimDesconto, useCart } from "@/features/carrinho/CartContext";
 import { lookupCep } from "@/features/endereco/services/lookupCep";
+import { FreteGratisProgress } from "@/features/frete/components/FreteGratisProgress";
+import { FreteOpcaoPreco } from "@/features/frete/components/FreteOpcaoPreco";
 import { useFreteQuote } from "@/features/frete/hooks/useFreteQuote";
+import { isFreteGratis } from "@/features/frete/utils/freteGratis";
 import type { CheckoutPayload } from "@/features/checkout/types";
 import { criarPedidoECheckout } from "@/features/checkout/services/criarPedidoECheckout";
 import { previewCupomDesconto } from "@/features/checkout/services/previewCupomDesconto";
@@ -95,13 +98,16 @@ export function CheckoutPage({
     () => lines.map((l) => ({ produto_id: l.id, quantidade: l.quantity })),
     [lines],
   );
+  const freteGratis = !exigeRetiradaLoja && isFreteGratis(baseAposKit);
   const frete = useFreteQuote(
     itensPayload,
     cep,
     modoEntrega === "envio" && hasItems && !exigeRetiradaLoja,
+    freteGratis,
   );
   const shipping =
     !hasItems ? 0 : modoEntrega === "retirada" ? 0 : frete.freteValue;
+  const freteSelecionadoGratis = frete.gratisId != null && frete.selectedId === frete.gratisId;
   const [cupomInput, setCupomInput] = useState("");
   const [cupomDesconto, setCupomDesconto] = useState<number | null>(null);
   const [cupomMensagem, setCupomMensagem] = useState<string | null>(null);
@@ -660,6 +666,17 @@ export function CheckoutPage({
                   <h2 id={`${baseId}-frete`} className="text-lg font-bold text-black">
                     Frete
                   </h2>
+                  {!exigeRetiradaLoja ? (
+                    <FreteGratisProgress valorProdutos={baseAposKit} className="mt-3" />
+                  ) : null}
+                  {!freteGratis && !exigeRetiradaLoja ? (
+                    <p className="mt-2 text-xs text-store-navy-muted">
+                      <Link href="/carrinho" className="font-semibold text-[#1d63ed] underline">
+                        Ver sugestões de produtos
+                      </Link>{" "}
+                      para completar o frete grátis.
+                    </p>
+                  ) : null}
                   {frete.loading ? (
                     <p className="mt-2 text-sm text-store-navy-muted">Calculando opcoes de frete...</p>
                   ) : frete.error ? (
@@ -691,9 +708,11 @@ export function CheckoutPage({
                                 : ""}
                             </span>
                           </span>
-                          <strong className="text-sm text-black">
-                            {money.format(opcao.precoCentavos / 100)}
-                          </strong>
+                          <FreteOpcaoPreco
+                            precoCentavos={opcao.precoCentavos}
+                            gratis={opcao.id === frete.gratisId}
+                            className="text-sm text-black"
+                          />
                         </label>
                       ))}
                     </fieldset>
@@ -728,8 +747,16 @@ export function CheckoutPage({
                 ) : null}
                 <div className="flex justify-between gap-4">
                   <dt className="text-store-navy">Frete</dt>
-                  <dd className="font-semibold tabular-nums text-black">
-                    {modoEntrega === "retirada" ? "Retirada na loja" : money.format(shipping)}
+                  <dd
+                    className={`font-semibold tabular-nums ${
+                      modoEntrega === "envio" && freteSelecionadoGratis ? "text-emerald-700" : "text-black"
+                    }`}
+                  >
+                    {modoEntrega === "retirada"
+                      ? "Retirada na loja"
+                      : freteSelecionadoGratis
+                        ? "Grátis"
+                        : money.format(shipping)}
                   </dd>
                 </div>
                 {cupomDesconto != null && cupomDesconto > 0 ? (

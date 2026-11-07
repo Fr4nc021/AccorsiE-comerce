@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { opcaoFreteGratisId } from "@/features/frete/utils/freteGratis";
 import type { MelhorEnvioQuoteOption } from "@/services/melhorEnvio/types";
 
 export type FreteItemInput = {
@@ -25,12 +26,15 @@ function onlyCepDigits(raw: string): string {
   return raw.replace(/\D/g, "").slice(0, 8);
 }
 
-function pickCheapest(opcoes: MelhorEnvioQuoteOption[]): string | null {
-  if (opcoes.length === 0) return null;
-  return [...opcoes].sort((a, b) => a.precoCentavos - b.precoCentavos)[0]?.id ?? null;
-}
+const pickCheapest = opcaoFreteGratisId;
 
-export function useFreteQuote(items: FreteItemInput[], cep: string, enabled: boolean = true) {
+/** `freteGratis`: o pedido atingiu o mínimo; a opção mais barata passa a custar zero. */
+export function useFreteQuote(
+  items: FreteItemInput[],
+  cep: string,
+  enabled: boolean = true,
+  freteGratis: boolean = false,
+) {
   const [state, setState] = useState<FreteQuoteState>({
     loading: false,
     error: null,
@@ -118,13 +122,25 @@ export function useFreteQuote(items: FreteItemInput[], cep: string, enabled: boo
     setState((prev) => ({ ...prev, selectedId: id }));
   }, []);
 
+  const gratisId = useMemo(
+    () => (freteGratis ? opcaoFreteGratisId(state.opcoes) : null),
+    [freteGratis, state.opcoes],
+  );
+
+  const precoOpcao = useCallback(
+    (opcao: MelhorEnvioQuoteOption) => (opcao.id === gratisId ? 0 : opcao.precoCentavos / 100),
+    [gratisId],
+  );
+
   return {
     loading: state.loading,
     error: state.error,
     opcoes: state.opcoes,
     selectedId: state.selectedId,
     selectedOption,
-    freteValue: selectedOption ? selectedOption.precoCentavos / 100 : 0,
+    freteValue: selectedOption ? precoOpcao(selectedOption) : 0,
     setSelectedId,
+    gratisId,
+    precoOpcao,
   };
 }

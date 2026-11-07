@@ -89,7 +89,8 @@ function validatePayload(payload: CheckoutPayload): string | null {
       return "Informe um telefone para contato.";
     }
   } else {
-    if (!Number.isFinite(frete) || frete <= 0) {
+    // Zero = frete grátis; a RPC confere se o pedido atingiu o mínimo.
+    if (!Number.isFinite(frete) || frete < 0) {
       return "Selecione uma opção de frete válida antes de finalizar.";
     }
     const required = [
